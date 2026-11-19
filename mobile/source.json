@@ -17,12 +17,12 @@
       "screenshots": [],
       "versions": [
         {
-          "version": "1.0.3",
-          "buildVersion": "4",
-          "date": "2026-11-19T14:20:51.100Z",
-          "localizedDescription": "Новая «Моя волна» с артистом, трек вперёд и назад с экрана блокировки, вход в SoundCloud, комната без задержки, уведомления о треках от друзей",
-          "downloadURL": "https://github.com/akimovicaleksej51-cmyk/splav-app/releases/download/ios-v1.0.3/Splav.ipa",
-          "size": 850014,
+          "version": "1.0.4",
+          "buildVersion": "5",
+          "date": "2026-11-19T14:37:52.437Z",
+          "localizedDescription": "Сплав теперь обновляется сам, без SideStore",
+          "downloadURL": "https://github.com/akimovicaleksej51-cmyk/splav-app/releases/download/ios-v1.0.4/Splav.ipa",
+          "size": 1434077,
           "minOSVersion": "15.0"
         }
       ],
