@@ -26,6 +26,7 @@ export const API = {
   importPlaylist: l => call('importPlaylist', l),
   historyAdd: e => call('historyAdd', e),
   wrapped: ym => call('wrapped', ym),
+  discover: o => call('discover', o),
   setPrefs: p => call('setPrefs', p),
   room: b => call('room', b),
   social: b => call('social', b),

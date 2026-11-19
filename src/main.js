@@ -679,7 +679,7 @@ handle('openExternal', async (url) => { if (/^https:\/\//.test(url)) shell.openE
 
 // ---------- артисты и альбомы ----------
 function yaAlbum(a) {
-  return { id: String(a.id), source: 'ya', title: a.title, year: a.year || null, cover: yaCover(a.coverUri, '400x400'), type: a.type || 'album', count: a.trackCount || 0 };
+  return { id: String(a.id), source: 'ya', title: a.title, year: a.year || null, cover: yaCover(a.coverUri, '400x400'), type: a.type || 'album', count: a.trackCount || 0, artist: (a.artists || []).map(x => x.name).join(', '), artistId: a.artists && a.artists[0] ? String(a.artists[0].id) : null, released: a.releaseDate || null };
 }
 function scAlbum(p) {
   const art = p.artwork_url || (p.tracks && p.tracks[0] && p.tracks[0].artwork_url) || (p.user && p.user.avatar_url);
@@ -1406,6 +1406,68 @@ handle('historyStats', async () => {
     if (h.t) m.t = h.t;
   }
   return Object.values(map);
+});
+
+// ---------- новинки недели, новое у ваших артистов, чарт ----------
+// новинки меняются в пятницу в 00:00, чарт — в четверг в 00:00 (по времени устройства)
+function weekKey(day) { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() - day + 7) % 7)); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
+const relCard = (t) => ({ kind: 'track', id: t.id, title: t.title, artist: t.artist, cover: t.cover, track: t });
+async function discoverReleases() {
+  if (config.yaToken) {
+    try {
+      const r = await ya('/landing3/new-releases');
+      const ids = ((r && r.newReleases) || []).slice(0, 24);
+      if (ids.length) {
+        const al = await ya('/albums', { method: 'POST', form: { 'album-ids': ids.join(',') } });
+        const list = (al || []).map(yaAlbum).filter(a => a && a.cover).map(a => ({ kind: 'album', ...a }));
+        if (list.length) return list;
+      }
+    } catch {}
+  }
+  try { const r = await sc('/charts', { kind: 'trending', genre: 'soundcloud:genres:all-music', limit: 24 }); const l = (r.collection || []).map(x => scTrack(x.track)).filter(Boolean).map(relCard); if (l.length) return l; } catch {}
+  try { return ((await au('/tracks/trending', { time: 'week' })) || []).slice(0, 24).map(auTrack).filter(Boolean).map(relCard); } catch { return []; }
+}
+async function discoverChart() {
+  if (config.yaToken) {
+    try {
+      const r = await ya('/landing3/chart/russia');
+      const list = ((r && r.chart && r.chart.tracks) || []).map(x => { const t = yaTrack(x.track); if (t) { t.pos = x.chartPosition && x.chartPosition.position; t.move = x.chartPosition && x.chartPosition.progress; } return t; }).filter(Boolean).slice(0, 50);
+      if (list.length) return list;
+    } catch {}
+  }
+  try { const r = await sc('/charts', { kind: 'top', genre: 'soundcloud:genres:all-music', limit: 50 }); const l = (r.collection || []).map(x => scTrack(x.track)).filter(Boolean); if (l.length) return l; } catch {}
+  try { return ((await au('/tracks/trending', { time: 'week' })) || []).slice(0, 50).map(auTrack).filter(Boolean); } catch { return []; }
+}
+// новые релизы у артистов, которых вы слушаете: за последние 45 дней
+async function discoverFresh(artists) {
+  const since = Date.now() - 45 * 864e5, out = [];
+  await Promise.all((artists || []).slice(0, 14).map(async a => {
+    try {
+      if (a.source === 'ya' && config.yaToken) {
+        const d = await ya(`/artists/${a.id}/direct-albums`, { query: { page: 0, 'page-size': 6, 'sort-by': 'year' } });
+        const al = ((d && d.albums) || []).map(yaAlbum).filter(x => x.released && Date.parse(x.released) > since).sort((x, y) => Date.parse(y.released) - Date.parse(x.released))[0];
+        if (al) { const br = await ya(`/artists/${a.id}/brief-info`).catch(() => null); out.push({ artist: { source: 'ya', id: a.id, name: a.name, cover: br && br.artist && br.artist.cover ? yaCover(br.artist.cover.uri, '300x300') : al.cover }, release: { kind: 'album', ...al }, ts: Date.parse(al.released) }); }
+      } else if (a.source === 'sc') {
+        const r = await sc(`/users/${a.id}/tracks`, { limit: 5 });
+        const t = ((r && r.collection) || []).filter(x => Date.parse(x.created_at) > since).sort((x, y) => Date.parse(y.created_at) - Date.parse(x.created_at))[0];
+        if (t) { const tr = scTrack(t); if (tr) out.push({ artist: { source: 'sc', id: a.id, name: a.name, cover: t.user && t.user.avatar_url ? t.user.avatar_url.replace('-large', '-t300x300') : tr.cover }, release: relCard(tr), ts: Date.parse(t.created_at) }); }
+      }
+    } catch {}
+  }));
+  return out.sort((x, y) => y.ts - x.ts).slice(0, 12);
+}
+handle('discover', async ({ artists = [], force = false } = {}) => {
+  const src = config.yaToken ? 'ya' : 'guest';
+  const C = config.discover || (config.discover = {});
+  const relKey = src + ':' + weekKey(5), chartKey = src + ':' + weekKey(4);
+  const freshKey = relKey + ':' + artists.map(a => a.source + a.id).slice(0, 14).join(',');
+  const jobs = [];
+  if (force || C.relKey !== relKey || !(C.releases || []).length) jobs.push(discoverReleases().then(r => { if (r.length) { C.releases = r; C.relKey = relKey; } }));
+  if (force || C.chartKey !== chartKey || !(C.chart || []).length) jobs.push(discoverChart().then(r => { if (r.length) { C.chart = r; C.chartKey = chartKey; } }));
+  if (force || C.freshKey !== freshKey) jobs.push(discoverFresh(artists).then(r => { C.fresh = r; C.freshKey = freshKey; }));
+  await Promise.all(jobs);
+  if (jobs.length) saveConfig();
+  return { releases: C.releases || [], chart: C.chart || [], fresh: C.fresh || [] };
 });
 
 // ---------- «Слушать вместе» ----------

@@ -195,12 +195,14 @@ function renderSearchRes() {
   const box = $('#sRes');
   if (!search.q || !search.res) {
     const r = recent();
-    if (!r.length) { box.innerHTML = '<div class="empty"><b>Ищем везде сразу</b>Яндекс Музыка, Звук, SoundCloud, Audius и Jamendo в одном списке</div>'; return; }
+    if (!r.length) { box.innerHTML = '<div id="disc"></div>'; renderDiscover(); return; }
     const arts = r.filter(x => x.k === 'a').slice(0, 10), trks = r.filter(x => x.k === 't').slice(0, 6), qs = r.filter(x => x.k === 'q').slice(0, 6);
     box.innerHTML = `<div class="sec-title">Недавнее<button id="rcClear">Очистить</button></div>
       ${arts.length ? `<div class="artist-row recent-artists">${arts.map((x, i) => `<div class="ar-item"><button class="ar-img" data-ra="${i}" style="background-image:${esc(cssUrl(x.a.cover))}"></button><button class="ar-play" data-rp="${i}" aria-label="Слушать ${esc(x.a.name)}">${ico('play')}</button><div class="ar-name">${esc(x.a.name)}</div></div>`).join('')}</div>` : ''}
       ${trks.length ? '<div class="list" id="rcTracks"></div>' : ''}
-      ${qs.map(x => `<button class="recent-row" data-q="${esc(x.q)}">${ico('clock')}<span>${esc(x.q)}</span></button>`).join('')}`;
+      ${qs.map(x => `<button class="recent-row" data-q="${esc(x.q)}">${ico('clock')}<span>${esc(x.q)}</span></button>`).join('')}
+      <div id="disc"></div>`;
+    renderDiscover();
     $$('[data-ra]', box).forEach(b => b.onclick = () => { const a = arts[+b.dataset.ra].a; openArtist(a.source, a.id, a.name); });
     $$('[data-rp]', box).forEach(b => b.onclick = async () => {
       const a = arts[+b.dataset.rp].a; haptic('medium'); toast(`Включаем ${a.name}…`);
@@ -224,6 +226,51 @@ function renderSearchRes() {
   $$('[data-a]', box).forEach(b => b.onclick = () => { const a = artists[+b.dataset.a]; haptic(); addRecent({ k: 'a', a: { source: a.source, id: a.id, name: a.name, cover: a.cover } }); openArtist(a.source, a.id, a.name); });
   if (tracks.length) renderList($('#sTracks', box), tracks, { onPlay: i => { addRecent({ k: 't', t: tracks[i] }); playQueue(tracks, i, 'list', 'Поиск'); }, onMore: t => trackMenu(t) });
   const l = $('#sLogin', box); if (l) l.onclick = () => login('ya');
+}
+
+/* ---------- новинки, новое у ваших артистов, чарт ---------- */
+const disc = { data: null, at: 0, loading: null };
+function myArtists() {
+  const cnt = new Map();
+  for (const t of [...state.likes.ya, ...state.likes.sc]) {
+    const a = t.artists && t.artists[0]; if (!a || !(a.source === 'ya' || a.source === 'sc')) continue;
+    const k = a.source + ':' + a.id; const c = cnt.get(k) || { source: a.source, id: String(a.id), name: a.name, n: 0 }; c.n++; cnt.set(k, c);
+  }
+  return [...cnt.values()].sort((a, b) => b.n - a.n).slice(0, 14).map(({ n, ...a }) => a);
+}
+async function loadDiscover() {
+  if (disc.data && Date.now() - disc.at < 3600e3) return disc.data;
+  disc.loading ||= API.discover({ artists: myArtists() }).then(d => { disc.data = d; disc.at = Date.now(); return d; }).finally(() => { disc.loading = null; });
+  return disc.loading;
+}
+const relSub = x => x.kind === 'album' ? [x.artist, TYPES[String(x.type || '').toLowerCase()] || ''].filter(Boolean).join(', ') : x.artist;
+function openRelease(x) { haptic(); if (x.kind === 'album') openAlbum(x.source, x.id); else playQueue([x.track], 0, 'list', 'Новинки'); }
+async function renderDiscover() {
+  const box = $('#disc'); if (!box) return;
+  if (!disc.data) box.innerHTML = '<div class="sec-title">Новинки недели</div><div class="cards">' + '<div class="card"><div class="c-img skeleton" style="margin:0"></div></div>'.repeat(3) + '</div>';
+  let d; try { d = await loadDiscover(); } catch { box.innerHTML = ''; return; }
+  if (!$('#disc') || state.tab !== 'search' || search.q) return;
+  const { releases = [], fresh = [], chart = [] } = d;
+  box.innerHTML = `
+    ${releases.length ? `<div class="sec-title">Новинки недели<span class="sec-note">обновятся в пятницу</span></div><div class="cards" id="dRel">${releases.map((x, i) => `<button class="card" data-i="${i}"><div class="c-img" style="background-image:${esc(cssUrl(x.cover))}"></div><div class="c-title">${esc(x.title)}</div><div class="c-sub">${esc(relSub(x))}</div></button>`).join('')}</div>` : ''}
+    ${fresh.length ? `<div class="sec-title">Новое у ваших артистов</div><div class="cards" id="dFresh">${fresh.map((f, i) => `<button class="fresh-card" data-i="${i}"><div class="fc-art" style="background-image:${esc(cssUrl(f.artist.cover))}"></div><div class="fc-rel" style="background-image:${esc(cssUrl(f.release.cover))}"></div><div class="fc-name">${esc(f.artist.name)}</div><div class="fc-title">${esc(f.release.title)}</div><span class="fc-play">${ico('play')}</span></button>`).join('')}</div>` : ''}
+    ${chart.length ? `<div class="sec-title">Чарт<span class="sec-note">обновится в четверг</span><button id="dAll">Весь чарт</button></div><div class="list" id="dChart"></div>` : ''}`;
+  $$('#dRel .card', box).forEach(b => b.onclick = () => openRelease(releases[+b.dataset.i]));
+  $$('#dFresh .fresh-card', box).forEach(b => b.onclick = e => {
+    const f = fresh[+b.dataset.i];
+    if (e.target.closest('.fc-play') || e.target.closest('.fc-rel')) openRelease(f.release); else openArtist(f.artist.source, f.artist.id, f.artist.name);
+  });
+  if (chart.length) {
+    const top = chart.slice(0, 10);
+    renderList($('#dChart', box), top, { onPlay: i => playQueue(chart, i, 'list', 'Чарт'), onMore: t => trackMenu(t), numbered: false });
+    $$('#dChart .trk', box).forEach((row, i) => row.insertAdjacentHTML('afterbegin', `<span class="chart-pos">${i + 1}</span>`));
+    $('#dAll', box).onclick = () => push('Чарт', (pg, page, setTitle) => {
+      setTitle('Чарт');
+      pg.innerHTML = '<div class="head" style="position:static;padding-top:4px"><h1>Чарт</h1></div><div class="note" style="padding-top:0">Обновляется по четвергам</div><div class="list" id="chAll" style="margin-top:10px"></div>';
+      renderList($('#chAll', pg), chart, { onPlay: i => playQueue(chart, i, 'list', 'Чарт'), onMore: t => trackMenu(t) });
+      $$('#chAll .trk', pg).forEach((row, i) => row.insertAdjacentHTML('afterbegin', `<span class="chart-pos">${i + 1}</span>`));
+    });
+  }
 }
 
 /* ================= МОЯ МУЗЫКА ================= */

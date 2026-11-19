@@ -1,6 +1,6 @@
 {
   "name": "splav-mobile",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "scripts": {
     "build": "node build.mjs",
@@ -24,6 +24,6 @@
     "js-sha256": "^0.11.0",
     "path-browserify": "^1.0.1"
   },
-  "releaseNotes": "Волна по жанру, недавнее в поиске, итоги месяца, приглашение ссылкой, реакции",
+  "releaseNotes": "Поиск: новинки недели, новое у ваших артистов и чарт",
   "nativeVersion": "1.0.9"
 }
