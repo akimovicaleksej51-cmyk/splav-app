@@ -17,12 +17,12 @@
       "screenshots": [],
       "versions": [
         {
-          "version": "1.0.9",
-          "buildVersion": "10",
-          "date": "2026-11-19T15:24:33.229Z",
-          "localizedDescription": "SoundCloud на iPhone, исправлено автообновление",
-          "downloadURL": "https://github.com/akimovicaleksej51-cmyk/splav-app/releases/download/ios-v1.0.9/Splav.ipa",
-          "size": 1435199,
+          "version": "1.1.2",
+          "buildVersion": "14",
+          "date": "2026-11-19T15:58:30.016Z",
+          "localizedDescription": "Волна по жанру, итоги месяца, новинки и чарт в поиске, реакции, приглашение ссылкой. Исправлено автообновление",
+          "downloadURL": "https://github.com/akimovicaleksej51-cmyk/splav-app/releases/download/ios-v1.1.2/Splav.ipa",
+          "size": 1441875,
           "minOSVersion": "15.0"
         }
       ],
