@@ -17,8 +17,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    runs-on: macos-15
+  # 1) версии и пакет обновления — на Linux, это быстро и не ждёт очереди на Мак
+  web:
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.v.outputs.web }}
+      native: ${{ steps.v.outputs.native }}
+      nativeExists: ${{ steps.v.outputs.nativeExists }}
     defaults:
       run:
         working-directory: mobile
@@ -36,15 +41,16 @@ jobs:
           echo "nativeExists=$(has ios-v$NATIVE)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@v4
+        if: steps.v.outputs.webExists == 'no'
         with:
           node-version: 22
 
-      - name: Интерфейс
-        run: npm ci && node build.mjs --min
-
       - name: Пакет обновления
         if: steps.v.outputs.webExists == 'no'
-        run: cd www && zip -qr ../web.zip . && cd .. && ls -la web.zip && shasum -a 256 web.zip | cut -d' ' -f1 > /tmp/web.sha && cat /tmp/web.sha
+        run: |
+          npm ci && node build.mjs --min
+          cd www && zip -qr ../web.zip . && cd ..
+          sha256sum web.zip | cut -d' ' -f1 > /tmp/web.sha && cat /tmp/web.sha
 
       - name: Выпуск обновления
         if: steps.v.outputs.webExists == 'no'
@@ -56,14 +62,38 @@ jobs:
           files: mobile/web.zip
           make_latest: false
 
-      - name: Сборка .ipa
-        if: steps.v.outputs.nativeExists == 'no'
+      - name: Описание обновления
+        if: steps.v.outputs.webExists == 'no'
         run: |
-          npx cap sync ios
+          git config user.name "splav-bot"
+          git config user.email "splav-bot@users.noreply.github.com"
+          git fetch origin main && git checkout -B main origin/main
+          printf '{\n  "version": "%s",\n  "minNative": "%s",\n  "url": "https://github.com/%s/releases/download/web-v%s/web.zip",\n  "checksum": "%s"\n}\n' \
+            "${{ steps.v.outputs.web }}" "${{ steps.v.outputs.native }}" "${{ github.repository }}" "${{ steps.v.outputs.web }}" "$(cat /tmp/web.sha)" > web.json
+          git add web.json
+          git commit -m "Обновление интерфейса ${{ steps.v.outputs.web }}" || exit 0
+          for i in 1 2 3; do git push origin main && break; git pull --rebase origin main; done
+
+  # 2) .ipa для SideStore — только когда поднята nativeVersion
+  ipa:
+    needs: web
+    if: needs.web.outputs.nativeExists == 'no'
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Сборка .ipa
+        run: |
+          npm ci && node build.mjs --min && npx cap sync ios
           xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            MARKETING_VERSION=${{ steps.v.outputs.native }} CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            MARKETING_VERSION=${{ needs.web.outputs.native }} CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             build | tail -n 40
           test -d build/Build/Products/Release-iphoneos/App.app
           mkdir -p Payload && cp -R build/Build/Products/Release-iphoneos/App.app Payload/
@@ -74,28 +104,21 @@ jobs:
           ls -la Splav.ipa
 
       - name: Выпуск для SideStore
-        if: steps.v.outputs.nativeExists == 'no'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ios-v${{ steps.v.outputs.native }}
-          name: Сплав для iPhone ${{ steps.v.outputs.native }}
+          tag_name: ios-v${{ needs.web.outputs.native }}
+          name: Сплав для iPhone ${{ needs.web.outputs.native }}
           body_path: mobile/RELEASE.md
           files: mobile/Splav.ipa
           make_latest: false
 
-      - name: Обновить источники
-        if: steps.v.outputs.webExists == 'no' || steps.v.outputs.nativeExists == 'no'
+      - name: Источник SideStore
         run: |
+          cp Splav.ipa /tmp/Splav.ipa
           git config user.name "splav-bot"
           git config user.email "splav-bot@users.noreply.github.com"
-          cp Splav.ipa /tmp/Splav.ipa 2>/dev/null || true
-          git fetch origin main
-          git checkout -B main origin/main
-          if [ "${{ steps.v.outputs.nativeExists }}" = "no" ]; then node scripts/source.mjs /tmp/Splav.ipa "${{ github.repository }}" "ios-v${{ steps.v.outputs.native }}"; fi
-          if [ "${{ steps.v.outputs.webExists }}" = "no" ]; then
-            printf '{\n  "version": "%s",\n  "minNative": "%s",\n  "url": "https://github.com/%s/releases/download/web-v%s/web.zip",\n  "checksum": "%s"\n}\n' \
-              "${{ steps.v.outputs.web }}" "${{ steps.v.outputs.native }}" "${{ github.repository }}" "${{ steps.v.outputs.web }}" "$(cat /tmp/web.sha)" > web.json
-          fi
-          git add source.json web.json 2>/dev/null || git add -A .
-          git commit -m "Источники: интерфейс ${{ steps.v.outputs.web }}, основа ${{ steps.v.outputs.native }}" || exit 0
-          git push origin main
+          git fetch origin main && git checkout -B main origin/main
+          node scripts/source.mjs /tmp/Splav.ipa "${{ github.repository }}" "ios-v${{ needs.web.outputs.native }}"
+          git add source.json
+          git commit -m "Источник SideStore: основа ${{ needs.web.outputs.native }}" || exit 0
+          for i in 1 2 3; do git push origin main && break; git pull --rebase origin main; done
