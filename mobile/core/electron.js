@@ -61,8 +61,20 @@ export function BrowserWindow(opts = {}) {
 }
 BrowserWindow.getAllWindows = () => [];
 
+// куки окна входа: сначала из хранилища WebView, а если там ещё пусто — прямо со страницы
+// (SoundCloud после входа через Apple ставит ключ скриптом, и хранилище отдаёт его с задержкой)
+async function loginCookies(name) {
+  if (!isNative) return [];
+  const list = (await Native.loginCookies({ name }).catch(() => ({}))).cookies || [];
+  if (list.length || !name) return list;
+  try {
+    const r = await Native.loginEval({ code: `(() => { const m = document.cookie.match(/(?:^|; )${name}=([^;]+)/); if (m) return decodeURIComponent(m[1]); for (const k of Object.keys(localStorage)) { if (/oauth/i.test(k)) { const v = localStorage.getItem(k); const t = /(\\d-\\d{6}-\\d+-[A-Za-z0-9]+)/.exec(v || ''); if (t) return t[1]; } } return null; })()` });
+    const v = JSON.parse((r && r.value) || 'null');
+    return v ? [{ name, value: v }] : [];
+  } catch { return []; }
+}
 const loginSession = {
-  cookies: { get: async ({ name } = {}) => isNative ? ((await Native.loginCookies({ name })).cookies || []) : [] },
+  cookies: { get: async ({ name } = {}) => loginCookies(name) },
   clearStorageData: async () => { if (isNative) await Native.clearLogin().catch(noop); },
 };
 export const session = { fromPartition: () => loginSession, defaultSession: deep() };
