@@ -47,6 +47,7 @@ function showPage(name) {
   if (name === 'search') setTimeout(() => $('#searchInput').focus(), 30);
   if (window.Wave3D) Wave3D.setVisible(name === 'wave');
   if (name === 'friends') onFriendsShown();
+  if (name === 'search' && !$('#searchInput').value.trim()) renderSearchHome();
 }
 $$('.nav-item').forEach(b => b.addEventListener('click', () => showPage(b.dataset.page)));
 
@@ -491,6 +492,7 @@ function renderWaveChips(changedKey, dir) {
   });
   $('#mixToggle').classList.toggle('on', !!state.wave.mix);
   $('#mixToggle').classList.toggle('hidden', !state.accounts.sc);
+  renderWaveExtras();
 }
 $('#mixToggle').addEventListener('click', async () => { state.wave.mix = !state.wave.mix; renderWaveChips(); await applyWaveSettings(); });
 async function applyWaveSettings() {
@@ -585,7 +587,7 @@ let searchTimer, searchSeq = 0;
 $('#searchInput').addEventListener('input', e => {
   clearTimeout(searchTimer);
   const q = e.target.value.trim();
-  if (!q) { renderArtists([]); $('#searchResults').innerHTML = '<div class="empty">Ищем сразу в Яндекс Музыке и SoundCloud</div>'; return; }
+  if (!q) { renderArtists([]); renderLocked([]); renderSearchHome(); return; }
   searchTimer = setTimeout(async () => {
     const seq = ++searchSeq;
     $('#searchResults').innerHTML = '<div class="empty">Ищем…</div>';
@@ -593,7 +595,9 @@ $('#searchInput').addEventListener('input', e => {
       const r = await API.search(q);
       if (seq !== searchSeq) return;
       renderArtists(r.artists || []);
+      addRecent({ k: 'q', q });
       renderList($('#searchResults'), r.tracks, r.locked && r.locked.length ? 'В открытых источниках не нашли' : (r.artists || []).length ? '' : 'Ничего не нашли. Попробуйте написать иначе');
+      $$('#searchResults .row').forEach((row, i) => row.addEventListener('click', () => addRecent({ k: 't', t: r.tracks[i] }), true));
       renderLocked(r.locked || []);
     } catch (err) { if (seq === searchSeq) $('#searchResults').innerHTML = `<div class="empty">Поиск не сработал: ${esc(err.message)}</div>`; }
   }, 320);
@@ -608,7 +612,65 @@ function renderArtists(list) {
   box.innerHTML = `<button class="ab-best" data-i="0"><i style="background-image:${esc(cssUrl(best.cover))}"></i><span><b>${esc(best.name)}</b><small>Артист${best.source === 'sc' ? ' в SoundCloud' : best.genre ? ', ' + esc(best.genre) : ''}</small></span></button>
     ${others.length ? `<div class="ab-row">${others.map((a, i) => `<button class="ab-item" data-i="${i + 1}"><i style="background-image:${esc(cssUrl(a.cover))}"></i><b>${esc(a.name)}</b></button>`).join('')}</div>` : ''}
     ${''}<div class="ab-label">Треки</div>`;
-  $$('[data-i]', box).forEach(b => b.addEventListener('click', () => { const a = list[+b.dataset.i]; openArtist(a.source, a.id); }));
+  $$('[data-i]', box).forEach(b => b.addEventListener('click', () => { const a = list[+b.dataset.i]; addRecent({ k: 'a', a: { source: a.source, id: a.id, name: a.name, cover: a.cover } }); openArtist(a.source, a.id); }));
+}
+
+// ---------- главная поиска ----------
+const RECENT_KEY = 'splav.recent2';
+const recentList = () => { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch { return []; } };
+const recentId = r => r.k === 'q' ? 'q:' + r.q.toLowerCase() : r.k === 'a' ? 'a:' + r.a.source + r.a.id : 't:' + key(r.t);
+function addRecent(item) { const k = recentId(item); localStorage.setItem(RECENT_KEY, JSON.stringify([item, ...recentList().filter(x => recentId(x) !== k)].slice(0, 16))); }
+const discData = { d: null, at: 0, p: null };
+function myArtistsForDiscover() {
+  const cnt = new Map();
+  for (const t of [...state.likes.ya, ...state.likes.sc]) {
+    const a = t.artists && t.artists[0]; if (!a || !(a.source === 'ya' || a.source === 'sc')) continue;
+    const k = a.source + ':' + a.id; const c = cnt.get(k) || { source: a.source, id: String(a.id), name: a.name, n: 0 }; c.n++; cnt.set(k, c);
+  }
+  return [...cnt.values()].sort((a, b) => b.n - a.n).slice(0, 14).map(({ n, ...a }) => a);
+}
+function loadDiscoverData() {
+  if (discData.d && Date.now() - discData.at < 3600e3) return Promise.resolve(discData.d);
+  return discData.p ||= API.discover({ artists: myArtistsForDiscover() }).then(d => { discData.d = d; discData.at = Date.now(); return d; }).finally(() => { discData.p = null; });
+}
+const TYPE_RU = { album: 'Альбом', single: 'Сингл', compilation: 'Сборник', ep: 'EP' };
+function openRelease(x) { if (x.kind === 'album') openAlbum(x.source, x.id); else playQueue([x.track], 0, 'list', { type: 'search', label: 'Новинки' }); }
+async function renderSearchHome() {
+  const box = $('#searchResults');
+  const r = recentList();
+  const arts = r.filter(x => x.k === 'a').slice(0, 10), trks = r.filter(x => x.k === 't').slice(0, 5), qs = r.filter(x => x.k === 'q').slice(0, 6);
+  box.innerHTML = `${r.length ? `<div class="sh-sec"><div class="sh-h">Недавнее<button id="rcClear">Очистить</button></div>
+      ${arts.length ? `<div class="ab-row">${arts.map((x, i) => `<div class="ab-item rc-a"><button class="rc-img" data-ra="${i}"><i style="background-image:${esc(cssUrl(x.a.cover))}"></i></button><button class="rc-play" data-rp="${i}" title="Слушать"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg></button><b>${esc(x.a.name)}</b></div>`).join('')}</div>` : ''}
+      ${qs.length ? `<div class="rc-qs">${qs.map(x => `<button class="chip" data-q="${esc(x.q)}">${esc(x.q)}</button>`).join('')}</div>` : ''}
+      ${trks.length ? '<div class="list" id="rcTracks"></div>' : ''}</div>` : ''}
+    <div id="discBox"><div class="empty">Загружаем новинки и чарт…</div></div>`;
+  $$('[data-ra]', box).forEach(b => b.addEventListener('click', () => { const a = arts[+b.dataset.ra].a; openArtist(a.source, a.id); }));
+  $$('[data-rp]', box).forEach(b => b.addEventListener('click', async () => { const a = arts[+b.dataset.rp].a; toast(`Включаем ${a.name}…`); try { const d = await API.artist(a.source, a.id); if ((d.popular || []).length) playQueue(d.popular, 0, 'list', { type: 'artist', label: a.name }); } catch (e) { toast(e.message); } }));
+  $$('.rc-qs .chip', box).forEach(b => b.addEventListener('click', () => { const i = $('#searchInput'); i.value = b.dataset.q; i.dispatchEvent(new Event('input')); }));
+  if (trks.length) renderList($('#rcTracks', box), trks.map(x => x.t), '', { context: { type: 'search', label: 'Недавнее' } });
+  const c = $('#rcClear', box); if (c) c.addEventListener('click', () => { localStorage.removeItem(RECENT_KEY); renderSearchHome(); });
+  let d; try { d = await loadDiscoverData(); } catch { $('#discBox').innerHTML = ''; return; }
+  if (!$('#discBox') || $('#searchInput').value.trim()) return;
+  const { releases = [], fresh = [], chart = [] } = d;
+  const db = $('#discBox');
+  db.innerHTML = `${releases.length ? `<div class="sh-sec"><div class="sh-h">Новинки недели<small>обновятся в пятницу</small></div><div class="dsc-row">${releases.map((x, i) => `<button class="dsc-card" data-rel="${i}"><i style="background-image:${esc(cssUrl(x.cover))}"></i><b>${esc(x.title)}</b><small>${esc([x.artist, x.kind === 'album' ? TYPE_RU[String(x.type || '').toLowerCase()] : ''].filter(Boolean).join(', '))}</small></button>`).join('')}</div></div>` : ''}
+    ${fresh.length ? `<div class="sh-sec"><div class="sh-h">Новое у ваших артистов</div><div class="dsc-row">${fresh.map((f, i) => `<button class="fr-card" data-fr="${i}"><i class="fr-a" style="background-image:${esc(cssUrl(f.artist.cover))}"></i><i class="fr-r" style="background-image:${esc(cssUrl(f.release.cover))}"></i><b>${esc(f.artist.name)}</b><small>${esc(f.release.title)}</small><span class="fr-p" data-frp="${i}"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg></span></button>`).join('')}</div></div>` : ''}
+    ${chart.length ? `<div class="sh-sec"><div class="sh-h">Чарт<small>обновится в четверг</small><button id="chartAll">Весь чарт</button></div><div class="list" id="chartTop"></div></div>` : ''}`;
+  $$('[data-rel]', db).forEach(b => b.addEventListener('click', () => openRelease(releases[+b.dataset.rel])));
+  $$('[data-fr]', db).forEach(b => b.addEventListener('click', e => { const f = fresh[+b.dataset.fr]; if (e.target.closest('.fr-p') || e.target.closest('.fr-r')) openRelease(f.release); else openArtist(f.artist.source, f.artist.id); }));
+  if (chart.length) {
+    // весь чарт в очереди, но на главной показываем первые 10
+    renderList($('#chartTop', db), chart, '', { context: { type: 'search', label: 'Чарт' } });
+    $$('#chartTop .row', db).forEach((row, i) => { row.insertAdjacentHTML('afterbegin', `<span class="chart-n">${i + 1}</span>`); if (i >= 10) row.classList.add('hidden'); });
+    $('#chartAll', db).addEventListener('click', () => { closeNp(); nav.stack.push({ type: 'chart' }); renderDetail(); });
+  }
+}
+function renderChartPage(page) {
+  const chart = (discData.d && discData.d.chart) || [];
+  page.innerHTML = `<button class="dt-back" id="dtBack">${BACK_SVG}Назад</button><div class="dt-head-simple"><div class="display" style="font-size:44px">Чарт</div><div class="dt-sub">Обновляется по четвергам</div></div><div class="list" id="chartFull"></div>`;
+  $('#dtBack').addEventListener('click', goBack);
+  renderList($('#chartFull'), chart, 'Чарт пока недоступен', { context: { type: 'search', label: 'Чарт' } });
+  $$('#chartFull .row').forEach((row, i) => row.insertAdjacentHTML('afterbegin', `<span class="chart-n">${i + 1}</span>`));
 }
 
 function renderLocked(list) {
@@ -848,6 +910,9 @@ async function renderDetail() {
       const a = item.data || (item.data = await API.artist(item.source, item.id));
       if (seq !== detailSeq) return;
       renderArtist(page, a, item);
+    } else if (item.type === 'chart') {
+      if (seq !== detailSeq) return;
+      renderChartPage(page); return;
     } else if (item.type === 'smart') {
       if (seq !== detailSeq) return;
       await renderSmartPage(page, item.id);
@@ -1544,7 +1609,26 @@ function renderStationChip() {
   const chip = $('#stationChip');
   chip.classList.toggle('hidden', !state.station);
   if (state.station) $('span', chip).textContent = 'Волна ' + state.station.label;
+  renderWaveExtras();
 }
+const WAVE_DEFAULTS = { diversity: 'default', moodEnergy: 'all', language: 'any' };
+// сброс в обычную «Мою волну» и плитки жанров
+function renderWaveExtras() {
+  const dirty = !!state.station || Object.entries(WAVE_DEFAULTS).some(([k, v]) => state.wave[k] !== v);
+  const r = $('#waveReset'); if (r) r.classList.toggle('hidden', !dirty);
+  const g = $('#genreGrid'); if (!g) return;
+  g.innerHTML = GENRE_LIST.map(([k, n], i) => `<button class="genre${state.station && state.station.type === 'genre' && state.station.id === k ? ' on' : ''}" data-g="${k}" style="--h:${(i * 27) % 360}">${n}</button>`).join('');
+}
+document.addEventListener('click', e => {
+  const g = e.target.closest('#genreGrid .genre');
+  if (g) { const name = (GENRE_LIST.find(x => x[0] === g.dataset.g) || [])[1] || g.dataset.g; $('#page-wave').scrollTo({ top: 0, behavior: 'smooth' }); startWave({ type: 'genre', source: 'mix', id: g.dataset.g, label: `«${name}»` }); return; }
+  if (e.target.closest('#waveReset')) {
+    const had = !!state.station; Object.assign(state.wave, WAVE_DEFAULTS); state.station = null;
+    renderWaveChips(); renderStationChip(); applyWaveSettings();
+    if (had || state.mode !== 'wave') startWave();
+    toast('Играет обычная «Моя волна»');
+  }
+});
 $('#stationChip button').addEventListener('click', () => { state.station = null; renderStationChip(); startWave(); });
 
 /* ---------- умные плейлисты ---------- */

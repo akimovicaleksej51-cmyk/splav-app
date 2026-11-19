@@ -65,6 +65,7 @@
         <div class="car" data-key="moodEnergy" data-label="Настроение"></div>
         <div class="car" data-key="language" data-label="Язык"></div>
         <button class="switch" id="mixToggle"><span class="knob"></span>SoundCloud в волне</button>
+        <button class="btn ghost hidden" id="waveReset">Сбросить</button>
       </div>
       <div class="onboarding hidden" id="onboarding">
         <div class="ob-title">Что вам нравится?</div>
@@ -75,6 +76,7 @@
           <button class="btn ghost" id="obLogin">У меня есть Яндекс, Звук или Apple Music</button>
         </div>
       </div>
+    <div class="genre-sec"><div class="gs-title">Волна по жанру</div><div class="genre-grid" id="genreGrid"></div></div>
     </section>
 
     <!-- ПОИСК -->
@@ -87,9 +89,7 @@
       </header>
       <div class="artist-block hidden" id="artistBlock"></div>
       <div class="locked-block hidden" id="lockedBlock"></div>
-      <div class="list" id="searchResults">
-        <div class="empty">Ищем сразу в Яндекс Музыке и SoundCloud</div>
-      </div>
+      <div class="list" id="searchResults"></div>
     </section>
 
     <!-- МОЯ МУЗЫКА -->

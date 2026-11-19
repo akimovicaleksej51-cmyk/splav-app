@@ -699,3 +699,42 @@ body.lite .queue, body.lite .ctx, body.lite .sleep-pop, body.lite .modal { backg
 .msg:hover .msg-rpick { opacity: 1; }
 .msg-rpick button { font-size: 14px; padding: 0 2px; filter: grayscale(.6); transition: transform .15s, filter .15s; }
 .msg-rpick button:hover, .msg-rpick button.on { filter: none; transform: scale(1.2); }
+
+/* волна: жанры и сброс */
+.genre-sec { padding: 6px 40px 40px; }
+.gs-title { font-weight: 800; font-size: 17px; margin: 6px 0 12px; }
+.genre-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.genre { position: relative; height: 70px; border-radius: 14px; overflow: hidden; text-align: left; padding: 0 14px; font-weight: 800; font-size: 14.5px; background: linear-gradient(135deg, hsl(var(--h) 55% 32% / .9), hsl(calc(var(--h) + 40) 50% 14% / .95)); border: 1px solid rgba(255,255,255,.06); transition: transform .2s var(--ease), filter .2s; }
+.genre::after { content: ''; position: absolute; right: -14px; bottom: -18px; width: 58px; height: 58px; border-radius: 50%; background: hsl(var(--h) 70% 55% / .35); filter: blur(4px); }
+.genre:hover { transform: translateY(-2px); filter: brightness(1.12); }
+.genre.on { outline: 2px solid var(--bone); outline-offset: -2px; }
+/* главная поиска */
+.sh-sec { padding: 0 40px; margin-bottom: 26px; }
+.sh-h { display: flex; align-items: baseline; gap: 10px; font-weight: 800; font-size: 18px; margin: 4px 0 12px; }
+.sh-h small { color: var(--smoke); font-size: 12px; font-weight: 700; flex: 1; }
+.sh-h button { margin-left: auto; color: var(--fog); font-size: 13px; font-weight: 700; }
+.sh-h button:hover { color: var(--bone); }
+.rc-a { position: relative; }
+.rc-img { display: block; }
+.rc-img i { display: block; width: 96px; height: 96px; border-radius: 50%; background: var(--ash) center/cover; margin-bottom: 8px; transition: transform .25s var(--ease); }
+.rc-img:hover i { transform: scale(1.05); }
+.rc-play { position: absolute; top: 62px; right: 0; width: 32px; height: 32px; border-radius: 50%; background: var(--bone); color: var(--obsidian); display: grid; place-items: center; box-shadow: 0 4px 14px rgba(0,0,0,.5); opacity: 0; transition: opacity .2s; }
+.rc-a:hover .rc-play { opacity: 1; }
+.rc-play svg { width: 14px; height: 14px; fill: currentColor; stroke: none; }
+.rc-qs { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 6px; }
+.dsc-row { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 6px; }
+.dsc-row::-webkit-scrollbar { height: 0; }
+.dsc-card { flex: 0 0 150px; text-align: left; }
+.dsc-card i { display: block; width: 150px; height: 150px; border-radius: 12px; background: var(--ash) center/cover; margin-bottom: 8px; transition: transform .25s var(--ease); }
+.dsc-card:hover i { transform: translateY(-3px); }
+.dsc-card b, .fr-card b { display: block; font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dsc-card small, .fr-card small { display: block; font-size: 12px; color: var(--fog); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fr-card { position: relative; flex: 0 0 180px; padding: 16px; border-radius: 18px; text-align: left; background: linear-gradient(160deg, rgba(var(--blood-rgb), .22), var(--graphite) 60%); border: 1px solid var(--line); transition: border-color .2s; }
+.fr-card:hover { border-color: rgba(var(--blood-rgb), .5); }
+.fr-a { display: block; width: 76px; height: 76px; border-radius: 50%; background: var(--ash) center/cover; margin-bottom: 14px; }
+.fr-r { position: absolute; top: 64px; left: 68px; width: 40px; height: 40px; border-radius: 8px; background: var(--ash) center/cover; border: 2px solid var(--graphite); }
+.fr-card small { padding-right: 34px; }
+.fr-p { position: absolute; right: 14px; bottom: 14px; width: 32px; height: 32px; border-radius: 50%; background: var(--bone); color: var(--obsidian); display: grid; place-items: center; }
+.fr-p svg { width: 14px; height: 14px; fill: currentColor; stroke: none; }
+.chart-n { width: 26px; flex-shrink: 0; text-align: center; font-family: var(--display); font-weight: 800; font-size: 15px; color: var(--fog); }
+.dt-head-simple { padding: 10px 40px 20px; }

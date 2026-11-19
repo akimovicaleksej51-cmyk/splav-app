@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld('api', {
   social: (b) => call('social', b),
   health: () => call('health'),
   focusWindow: () => call('focusWindow'),
+  discover: (o) => call('discover', o),
   updateCheck: () => call('updateCheck'),
   updateInstall: () => call('updateInstall'),
   historyStats: () => call('historyStats'),
