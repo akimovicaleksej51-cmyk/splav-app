@@ -1,0 +1,36 @@
+{
+  "name": "Сплав",
+  "identifier": "com.splav.source",
+  "subtitle": "Музыкальный плеер Сплав",
+  "iconURL": "https://raw.githubusercontent.com/akimovicaleksej51-cmyk/splav-app/main/mobile/icon.png",
+  "tintColor": "#b51d30",
+  "apps": [
+    {
+      "name": "Сплав",
+      "bundleIdentifier": "com.splav.mobile",
+      "developerName": "Сплав",
+      "subtitle": "Яндекс, Звук и SoundCloud в одном плеере",
+      "localizedDescription": "Музыкальный плеер: «Моя волна», поиск сразу по нескольким сервисам, тексты песен, комнаты «Слушать вместе» и отправка треков друзьям.",
+      "iconURL": "https://raw.githubusercontent.com/akimovicaleksej51-cmyk/splav-app/main/mobile/icon.png",
+      "tintColor": "#b51d30",
+      "category": "entertainment",
+      "screenshots": [],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "buildVersion": "1",
+          "date": "2026-11-19T11:03:56.095Z",
+          "localizedDescription": "Первая версия для iPhone: волна, поиск с артистами, моя музыка, плеер с текстом песен и «Вместе»",
+          "downloadURL": "https://github.com/akimovicaleksej51-cmyk/splav-app/releases/download/ios-v1.0.0/Splav.ipa",
+          "size": 777867,
+          "minOSVersion": "15.0"
+        }
+      ],
+      "appPermissions": {
+        "entitlements": [],
+        "privacy": {}
+      }
+    }
+  ],
+  "news": []
+}
