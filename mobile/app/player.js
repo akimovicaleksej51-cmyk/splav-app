@@ -168,11 +168,42 @@ const mini = $('#mini');
 $('#miniPlay').onclick = e => { e.stopPropagation(); togglePlay(); };
 $('#miniNext').onclick = e => { e.stopPropagation(); haptic(); next(true); };
 $('#miniNext').innerHTML = ico('next');
-mini.onclick = () => openPlayer();
-{ // свайп вверх по мини-плееру открывает плеер
-  let y0 = null;
-  mini.addEventListener('touchstart', e => { y0 = e.touches[0].clientY; }, { passive: true });
-  mini.addEventListener('touchend', e => { if (y0 !== null && y0 - e.changedTouches[0].clientY > 30) openPlayer(); y0 = null; }, { passive: true });
+// мини-плеер: свайп влево — следующий трек, вправо — предыдущий, вверх — открыть плеер
+{
+  let x0 = null, y0 = 0, dx = 0, axis = null, t0 = 0;
+  const content = () => [$('#miniCover'), mini.querySelector('.mini-meta')];
+  mini.addEventListener('touchstart', e => {
+    if (e.target.closest('.mini-btn')) { x0 = null; return; }
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dx = 0; axis = null; t0 = Date.now();
+  }, { passive: true });
+  mini.addEventListener('touchmove', e => {
+    if (x0 === null) return;
+    dx = e.touches[0].clientX - x0; const dy = e.touches[0].clientY - y0;
+    if (!axis && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+    if (axis === 'x') { mini.classList.add('swiping'); content().forEach(el => { el.style.transform = `translateX(${dx}px)`; el.style.opacity = String(1 - Math.min(.7, Math.abs(dx) / 220)); }); }
+  }, { passive: true });
+  mini.addEventListener('touchend', e => {
+    if (x0 === null) return;
+    const dy = e.changedTouches[0].clientY - y0;
+    if (axis === 'y' && dy < -30) openPlayer();
+    if (axis === 'x') {
+      const go = Math.abs(dx) > 70 || (Math.abs(dx) > 30 && Date.now() - t0 < 220);
+      const dir = dx < 0 ? -1 : 1;
+      mini.classList.remove('swiping');
+      if (go) {
+        haptic();
+        content().forEach(el => { el.style.transform = `translateX(${dir * 260}px)`; el.style.opacity = '0'; });
+        setTimeout(() => {
+          dir < 0 ? next(true) : prev();
+          content().forEach(el => { el.style.transition = 'none'; el.style.transform = `translateX(${-dir * 120}px)`; el.style.opacity = '0'; });
+          requestAnimationFrame(() => requestAnimationFrame(() => content().forEach(el => { el.style.transition = ''; el.style.transform = ''; el.style.opacity = ''; })));
+        }, 160);
+      } else content().forEach(el => { el.style.transform = ''; el.style.opacity = ''; });
+      mini._swiped = Date.now();
+    }
+    x0 = null;
+  }, { passive: true });
+  mini.onclick = () => { if (Date.now() - (mini._swiped || 0) < 350) return; openPlayer(); };
 }
 
 /* ---------- полноэкранный плеер ---------- */
