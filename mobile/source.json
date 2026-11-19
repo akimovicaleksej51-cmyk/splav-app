@@ -17,12 +17,12 @@
       "screenshots": [],
       "versions": [
         {
-          "version": "1.0.7",
-          "buildVersion": "8",
-          "date": "2026-11-19T15:06:20.320Z",
-          "localizedDescription": "Свайп по мини-плееру, вход в SoundCloud через Apple, уведомления можно смахнуть, исправлено автообновление",
-          "downloadURL": "https://github.com/akimovicaleksej51-cmyk/splav-app/releases/download/ios-v1.0.7/Splav.ipa",
-          "size": 1435157,
+          "version": "1.0.9",
+          "buildVersion": "10",
+          "date": "2026-11-19T15:24:33.229Z",
+          "localizedDescription": "SoundCloud на iPhone, исправлено автообновление",
+          "downloadURL": "https://github.com/akimovicaleksej51-cmyk/splav-app/releases/download/ios-v1.0.9/Splav.ipa",
+          "size": 1435199,
           "minOSVersion": "15.0"
         }
       ],
