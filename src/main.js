@@ -1408,6 +1408,11 @@ handle('room', async (b) => {
   return d;
 });
 
+handle('focusWindow', async () => {
+  if (mainWindow && !mainWindow.isDestroyed()) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.show(); mainWindow.focus(); app.focus({ steal: true }); }
+  return true;
+});
+
 handle('health', async () => {
   const base = ROOM_SERVER(); if (!base) return { ok: false, db: 'none' };
   const r = await fetch(base + '/api/health'); return r.json();

@@ -1,6 +1,6 @@
 {
   "name": "splav-mobile",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "scripts": {
     "build": "node build.mjs",
@@ -11,6 +11,7 @@
     "@capacitor/core": "^8.0.0",
     "@capacitor/haptics": "^8.0.0",
     "@capacitor/ios": "^8.0.0",
+    "@capacitor/local-notifications": "^8.3.1",
     "@capacitor/preferences": "^8.0.1",
     "@capacitor/splash-screen": "^8.0.0",
     "@capacitor/status-bar": "^8.0.0"
@@ -22,5 +23,5 @@
     "js-sha256": "^0.11.0",
     "path-browserify": "^1.0.1"
   },
-  "releaseNotes": "Новая «Моя волна» с артистом, переключение треков с экрана блокировки, исправлен вход в SoundCloud"
+  "releaseNotes": "Новая «Моя волна» с артистом, трек вперёд и назад с экрана блокировки, вход в SoundCloud, комната без задержки, уведомления о треках от друзей"
 }

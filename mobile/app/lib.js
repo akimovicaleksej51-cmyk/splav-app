@@ -62,9 +62,11 @@ export const ico = (n, cls = '') => `<svg viewBox="0 0 24 24" class="${cls}">${(
 
 /* ---------- уведомление ---------- */
 let toastT;
-export function toast(msg) {
+export function toast(msg, onClick) {
   const el = $('#toast'); el.textContent = msg; el.classList.add('show');
-  clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), 3000);
+  el.classList.toggle('clickable', !!onClick);
+  el.onclick = onClick ? () => { el.classList.remove('show'); haptic(); onClick(); } : null;
+  clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), onClick ? 5500 : 3000);
 }
 
 /* ---------- строки треков ---------- */

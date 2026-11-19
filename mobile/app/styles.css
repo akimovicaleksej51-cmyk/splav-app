@@ -405,3 +405,6 @@ body.paused .pl-cover { transform: scale(.88); }
 @keyframes sk { to { background-position: -200% 0; } }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+.toast.clickable { pointer-events: auto; border-color: rgba(var(--blood-rgb), .5); }
+.toast.clickable::after { content: 'Открыть'; float: right; margin-left: 12px; color: var(--blood-hi); font-weight: 800; }

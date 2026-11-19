@@ -3,6 +3,24 @@ import { API } from './api.js';
 import { $, $$, esc, cssUrl, ico, toast, haptic, state, sheet, actions, push, pop, plural, onTab, timeAgo, bindRows, SOURCE } from './lib.js';
 import { playTrack, playQueue, seekTo, curTime, isPlaying, audio, syncPlaying } from './player.js';
 
+import { LocalNotifications } from '@capacitor/local-notifications';
+import { isNative } from '../core/native.js';
+
+/* ---------- уведомления: в приложении — всплывашка, в фоне — системное ---------- */
+let notifId = 1;
+const notifRoutes = new Map();
+async function notify(title, body, go) {
+  if (!document.hidden || !isNative) { toast(`${title}: ${body}`, go); return; }
+  const id = notifId++; notifRoutes.set(id, go);
+  LocalNotifications.schedule({ notifications: [{ id, title, body }] }).catch(() => {});
+}
+if (isNative) {
+  LocalNotifications.addListener('localNotificationActionPerformed', e => {
+    const go = notifRoutes.get(e.notification.id); if (go) setTimeout(go, 300);
+  });
+}
+const goChat = id => async () => { (await import('./player.js')).closePlayer(); const { showTab } = await import('./lib.js'); showTab('together'); setTimeout(() => openChat(id), 120); };
+
 /* ---------- комната ---------- */
 export const room = { role: null, code: null, hostKey: null, v: 0, host: '', members: [], poll: null, ping: null, pubTimer: null, lastHostKey: null, lastSent: 0, applying: false, st: null };
 const myName = () => { const A = state.accounts; return (social.me && '@' + social.me.name) || (A.ya && A.ya.name) || (A.zv && A.zv.name) || (A.sc && A.sc.name) || 'Гость'; };
@@ -11,14 +29,14 @@ export function roomPublish(force) {
   if (room.role !== 'host') return;
   clearTimeout(room.pubTimer);
   room.pubTimer = setTimeout(async () => {
-    try { await API.room({ action: 'update', code: room.code, hostKey: room.hostKey, state: { track: roomTrack(state.current), playing: isPlaying(), position: curTime() } }); room.lastSent = Date.now(); }
+    try { const t0 = Date.now(); const ru = await API.room({ action: 'update', code: room.code, hostKey: room.hostKey, state: { track: roomTrack(state.current), playing: isPlaying(), position: curTime() + (isPlaying() ? (room.rtt || 150) / 2000 : 0) } }); room.rtt = room.rtt ? room.rtt * 0.7 + (Date.now() - t0) * 0.3 : Date.now() - t0; room.lastSent = Date.now(); }
     catch (e) { toast('Комната: ' + e.message); }
-  }, force ? 0 : 350);
+  }, force ? 0 : 120);
 }
 async function roomCreate(btn) {
   if (btn) { btn.disabled = true; btn.textContent = 'Создаём…'; }
   try {
-    const r = await API.room({ action: 'create', name: myName(), state: { track: roomTrack(state.current), playing: isPlaying(), position: curTime() } });
+    const r = await API.room({ action: 'create', name: myName(), state: { track: roomTrack(state.current), playing: isPlaying(), position: curTime() + (isPlaying() ? (room.rtt || 150) / 2000 : 0) } });
     Object.assign(room, { role: 'host', code: r.code, hostKey: r.hostKey, v: r.v || 1, host: myName(), members: [], lastSent: Date.now() });
     clearInterval(room.poll); room.poll = setInterval(roomHostTick, 10000);
     haptic('medium');
@@ -34,13 +52,15 @@ export async function roomJoin(code) {
   code = String(code || '').replace(/\D/g, '');
   if (code.length !== 6) { toast('Код комнаты — 6 цифр'); return false; }
   try {
+    const t0 = Date.now();
     const d = await API.room({ action: 'state', code, v: 0, members: true });
+    room.bestRtt = undefined; roomClock(d, t0, Date.now());
     if (d.closed) { toast('Эта комната уже закрыта'); return false; }
     roomLeave(true);
     Object.assign(room, { role: 'guest', code, v: 0, host: d.host, members: d.members || [], lastHostKey: null });
     API.room({ action: 'ping', code, name: myName() }).catch(() => {});
     clearInterval(room.ping); room.ping = setInterval(() => API.room({ action: 'ping', code: room.code, name: myName() }).catch(() => {}), 15000);
-    clearInterval(room.poll); room.poll = setInterval(roomGuestTick, 2000);
+    clearInterval(room.poll); room.poll = setInterval(roomGuestTick, 1000);
     haptic('medium'); toast(`Вы слушаете вместе с ${d.host}`);
     renderTogether();
     await roomApply(d);
@@ -52,17 +72,38 @@ async function roomGuestTick() {
   if (room.role !== 'guest') return;
   ticks++;
   try {
-    const d = await API.room({ action: 'state', code: room.code, v: room.v, members: ticks % 5 === 0 });
+    const t0 = Date.now();
+    const d = await API.room({ action: 'state', code: room.code, v: room.v, members: ticks % 10 === 0 });
+    roomClock(d, t0, Date.now());
     if (d.members) room.members = d.members;
     if (d.closed) { toast('Хозяин завершил комнату'); roomLeave(true); return; }
     await roomApply(d);
   } catch (e) { if (/нет|не найдена/i.test(e.message)) { toast('Комната закрыта'); roomLeave(true); } }
 }
+
+// ---------- точная синхронизация комнаты ----------
+// часы сервера: запоминаем сдвиг по самому быстрому запросу, чтобы сеть не «съедала» доли секунды
+function roomClock(d, t0, t1) {
+  const rtt = t1 - t0;
+  if (!(room.bestRtt <= rtt) || Date.now() - (room.bestAt || 0) > 60000) { room.bestRtt = rtt; room.bestAt = Date.now(); room.clockOff = d.now + rtt / 2 - t1; }
+  room.rtt = room.rtt ? room.rtt * 0.7 + rtt * 0.3 : rtt;
+}
+function roomExpected() {
+  const st = room.st; if (!st) return 0;
+  return st.playing ? st.position + (Date.now() + (room.clockOff || 0) - st.ts) / 1000 : st.position;
+}
+// маленькое расхождение догоняем скоростью (незаметно на слух), большое — перемоткой
+function roomDrift() {
+  const el = audio; if (!el || !room.st || !room.st.playing || el.paused) { if (el) el.playbackRate = 1; return; }
+  const diff = roomExpected() - el.currentTime;
+  if (Math.abs(diff) > 0.6) { el.playbackRate = 1; seekTo(Math.max(0, roomExpected() + 0.08)); }
+  else if (Math.abs(diff) > 0.06) el.playbackRate = 1 + Math.max(-0.06, Math.min(0.06, diff * 0.5));
+  else el.playbackRate = 1;
+}
 async function roomApply(d) {
-  if (d.state) { room.v = d.v; room.st = d.state; room.stNow = d.now; room.stLocal = Date.now(); }
+  if (d.state) { room.v = d.v; room.st = d.state; }
   const st = room.st; if (!st) return;
   const t = st.track;
-  const expected = () => st.playing ? st.position + ((room.stNow - st.ts) + (Date.now() - room.stLocal)) / 1000 + 0.25 : st.position;
   const k = t ? t.source + ':' + t.rawId : null;
   if (k && k !== room.lastHostKey) {
     room.lastHostKey = k;
@@ -70,14 +111,25 @@ async function roomApply(d) {
     if (!mine) { toast(`«${t.title}» недоступен у вас: нет подходящего источника`); return; }
     room.applying = true;
     state.mode = 'room'; state.queue = [mine]; state.qi = 0;
+    const done = () => { if (!room.applying) return; room.applying = false; if (room.st.playing) seekTo(Math.max(0, roomExpected() + 0.08)); else { seekTo(room.st.position); audio.pause(); } };
+    if (false) { await playTrack(mine); setTimeout(done, 900); return; }
+    // как только трек реально заиграл — сразу встаём в ту же секунду, что и хозяин
     await playTrack(mine);
-    setTimeout(() => { seekTo(Math.max(0, expected())); if (!st.playing) audio.pause(); room.applying = false; }, 900);
+    const el = audio;
+    if (!el.paused && el.readyState >= 3) setTimeout(done, 60);
+    else {
+      const onPlaying = () => { el.removeEventListener('playing', onPlaying); setTimeout(done, 60); };
+      el.addEventListener('playing', onPlaying);
+      setTimeout(() => { el.removeEventListener('playing', onPlaying); done(); }, 8000);
+    }
     return;
   }
   if (!state.current || room.applying) return;
-  if (st.playing && !isPlaying()) audio.play().catch(() => {});
-  if (!st.playing && isPlaying()) audio.pause();
-  if (st.playing && Math.abs(curTime() - expected()) > 2.5) seekTo(Math.max(0, expected()));
+  if (st.playing && !isPlaying()) { audio.play().catch(() => {}); }
+  if (!st.playing && isPlaying()) { audio.pause(); }
+  if (!st.playing && Math.abs(curTime() - st.position) > 0.5) seekTo(st.position);
+  if (!false) roomDrift();
+  else if (st.playing && Math.abs(curTime() - roomExpected()) > 1.5) seekTo(Math.max(0, roomExpected()));
   syncPlaying();
 }
 // трек друга может быть из сервиса, которого у вас нет: тогда ищем такой же в доступных
@@ -96,6 +148,7 @@ export function roomLeave(silent) {
   if (room.role === 'guest' && room.code) API.room({ action: 'leave', code: room.code, name: myName() }).catch(() => {});
   if (room.role === 'host' && room.code && !silent) API.room({ action: 'close', code: room.code, hostKey: room.hostKey }).catch(() => {});
   clearInterval(room.poll); clearInterval(room.ping);
+  if (audio) audio.playbackRate = 1;
   Object.assign(room, { role: null, code: null, hostKey: null, v: 0, members: [], lastHostKey: null, st: null });
   if (state.mode === 'room') state.mode = 'list';
   if (state.tab === 'together') renderTogether();
@@ -112,9 +165,9 @@ function updateCount() {
 }
 export async function socialInit() {
   try { const me = await API.social({ action: 'local' }); if (me) { social.me = me; social.read = me.read || {}; } } catch {}
-  if (social.me) socialSync();
+  if (social.me) { socialSync(); if (isNative) LocalNotifications.requestPermissions().catch(() => {}); }
   setInterval(() => {
-    if (!social.me || document.hidden) return;
+    if (!social.me || (document.hidden && !isPlaying())) return;
     if (Date.now() - social.lastSync > (state.tab === 'together' ? 5000 : 30000)) socialSync();
   }, 5000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden && social.me) { social.lastSync = 0; socialSync(); } });
@@ -128,8 +181,8 @@ async function socialSync() {
     const first = !social.loaded;
     const fresh = (d.inbox || []).filter(m => !social.inbox.some(x => x.id === m.id));
     if (!first) {
-      for (const m of fresh) if (social.chatWith !== m.f) toast(`Трек от @${m.fn}: «${m.t.title}»`);
-      for (const r of d.incoming) if (!social.incoming.some(x => x.id === r.id)) toast(`@${r.name} хочет добавить вас в друзья`);
+      for (const m of fresh) if (social.chatWith !== m.f || document.hidden) notify(`Трек от @${m.fn}`, `«${m.t.title}», ${m.t.artist}`, goChat(m.f));
+      for (const r of d.incoming) if (!social.incoming.some(x => x.id === r.id)) notify('Заявка в друзья', `@${r.name} хочет добавить вас в друзья`, async () => { const { showTab } = await import('./lib.js'); showTab('together'); });
     }
     Object.assign(social, { ver: d.ver, me: { ...social.me, name: d.me.name }, friends: d.friends, incoming: d.incoming, outgoing: d.outgoing, loaded: true });
     social.inbox = [...fresh, ...social.inbox].slice(0, 300);
