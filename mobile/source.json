@@ -17,12 +17,12 @@
       "screenshots": [],
       "versions": [
         {
-          "version": "1.0.0",
-          "buildVersion": "1",
-          "date": "2026-11-19T11:03:56.095Z",
-          "localizedDescription": "Первая версия для iPhone: волна, поиск с артистами, моя музыка, плеер с текстом песен и «Вместе»",
-          "downloadURL": "https://github.com/akimovicaleksej51-cmyk/splav-app/releases/download/ios-v1.0.0/Splav.ipa",
-          "size": 777867,
+          "version": "1.0.1",
+          "buildVersion": "2",
+          "date": "2026-11-19T12:05:49.787Z",
+          "localizedDescription": "Исправлена установка через SideStore",
+          "downloadURL": "https://github.com/akimovicaleksej51-cmyk/splav-app/releases/download/ios-v1.0.1/Splav.ipa",
+          "size": 778696,
           "minOSVersion": "15.0"
         }
       ],
