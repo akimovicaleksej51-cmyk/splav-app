@@ -1,6 +1,6 @@
 {
   "name": "splav",
-  "version": "1.7.2",
+  "version": "1.7.3",
   "description": "Яндекс Музыка, SoundCloud и ваши файлы в одном плеере",
   "main": "src/main.js",
   "scripts": {
