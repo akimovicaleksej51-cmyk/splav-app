@@ -1,6 +1,6 @@
 {
   "name": "splav-mobile",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "private": true,
   "scripts": {
     "build": "node build.mjs",
@@ -24,6 +24,6 @@
     "js-sha256": "^0.11.0",
     "path-browserify": "^1.0.1"
   },
-  "releaseNotes": "SoundCloud на iPhone: вход и музыка",
-  "nativeVersion": "1.0.7"
+  "releaseNotes": "SoundCloud на iPhone, исправлено автообновление",
+  "nativeVersion": "1.0.9"
 }

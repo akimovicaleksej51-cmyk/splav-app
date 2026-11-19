@@ -44,7 +44,7 @@ jobs:
 
       - name: Пакет обновления
         if: steps.v.outputs.webExists == 'no'
-        run: cd www && zip -qr ../web.zip . && cd .. && ls -la web.zip
+        run: cd www && zip -qr ../web.zip . && cd .. && ls -la web.zip && shasum -a 256 web.zip | cut -d' ' -f1 > /tmp/web.sha && cat /tmp/web.sha
 
       - name: Выпуск обновления
         if: steps.v.outputs.webExists == 'no'
@@ -93,8 +93,8 @@ jobs:
           git checkout -B main origin/main
           if [ "${{ steps.v.outputs.nativeExists }}" = "no" ]; then node scripts/source.mjs /tmp/Splav.ipa "${{ github.repository }}" "ios-v${{ steps.v.outputs.native }}"; fi
           if [ "${{ steps.v.outputs.webExists }}" = "no" ]; then
-            printf '{\n  "version": "%s",\n  "minNative": "%s",\n  "url": "https://github.com/%s/releases/download/web-v%s/web.zip"\n}\n' \
-              "${{ steps.v.outputs.web }}" "${{ steps.v.outputs.native }}" "${{ github.repository }}" "${{ steps.v.outputs.web }}" > web.json
+            printf '{\n  "version": "%s",\n  "minNative": "%s",\n  "url": "https://github.com/%s/releases/download/web-v%s/web.zip",\n  "checksum": "%s"\n}\n' \
+              "${{ steps.v.outputs.web }}" "${{ steps.v.outputs.native }}" "${{ github.repository }}" "${{ steps.v.outputs.web }}" "$(cat /tmp/web.sha)" > web.json
           fi
           git add source.json web.json 2>/dev/null || git add -A .
           git commit -m "Источники: интерфейс ${{ steps.v.outputs.web }}, основа ${{ steps.v.outputs.native }}" || exit 0

@@ -74,7 +74,7 @@ async function checkWeb(manual) {
     if (!(bundles || []).some(b => b.version === m.version && b.status === 'success')) {
       step = 'скачивание';
       if (manual) toast(`Скачиваем версию ${m.version}…`);
-      await CapacitorUpdater.download({ url: m.url, version: m.version });
+      await CapacitorUpdater.download({ url: m.url, version: m.version, checksum: m.checksum || '' });
     }
     if (manual) toast(`Версия ${m.version} скачана. Применяем…`);
     step = 'применение';
