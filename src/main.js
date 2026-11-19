@@ -165,10 +165,12 @@ let scUserId = null;
 
 async function scClientId(force = false) {
   if (config.scClientId && !force) return config.scClientId;
-  const html = await (await fetch('https://soundcloud.com/')).text();
-  const scripts = [...html.matchAll(/<script crossorigin src="(https:\/\/a-v2\.sndcdn\.com\/assets\/[^"]+\.js)"/g)].map(m => m[1]).reverse();
+  // просим страницу как обычный браузер на компьютере: телефону SoundCloud отдаёт мобильную версию без нужных скриптов
+  const desk = { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15', 'Accept-Language': 'ru,en;q=0.8' };
+  const html = await (await fetch('https://soundcloud.com/discover', { headers: desk })).text();
+  const scripts = [...new Set([...html.matchAll(/src="(https:\/\/a-v2\.sndcdn\.com\/assets\/[^"]+\.js)"/g)].map(m => m[1]))].reverse();
   for (const src of scripts) {
-    const js = await (await fetch(src)).text();
+    const js = await (await fetch(src, { headers: desk })).text();
     const m = js.match(/client_id\s*[:=]\s*"([0-9a-zA-Z]{32})"/) || js.match(/client_id=([0-9a-zA-Z]{32})/);
     if (m) { config.scClientId = m[1]; saveConfig(); return m[1]; }
   }
