@@ -575,18 +575,31 @@ let searchTimer, searchSeq = 0;
 $('#searchInput').addEventListener('input', e => {
   clearTimeout(searchTimer);
   const q = e.target.value.trim();
-  if (!q) { $('#searchResults').innerHTML = '<div class="empty">Ищем сразу в Яндекс Музыке и SoundCloud</div>'; return; }
+  if (!q) { renderArtists([]); $('#searchResults').innerHTML = '<div class="empty">Ищем сразу в Яндекс Музыке и SoundCloud</div>'; return; }
   searchTimer = setTimeout(async () => {
     const seq = ++searchSeq;
     $('#searchResults').innerHTML = '<div class="empty">Ищем…</div>';
     try {
       const r = await API.search(q);
       if (seq !== searchSeq) return;
-      renderList($('#searchResults'), r.tracks, r.locked && r.locked.length ? 'В открытых источниках не нашли' : 'Ничего не нашли. Попробуйте написать иначе');
+      renderArtists(r.artists || []);
+      renderList($('#searchResults'), r.tracks, r.locked && r.locked.length ? 'В открытых источниках не нашли' : (r.artists || []).length ? '' : 'Ничего не нашли. Попробуйте написать иначе');
       renderLocked(r.locked || []);
     } catch (err) { if (seq === searchSeq) $('#searchResults').innerHTML = `<div class="empty">Поиск не сработал: ${esc(err.message)}</div>`; }
   }, 320);
 });
+
+// сначала артист: крупная карточка лучшего совпадения и лента похожих
+function renderArtists(list) {
+  const box = $('#artistBlock');
+  box.classList.toggle('hidden', !list.length);
+  if (!list.length) { box.innerHTML = ''; return; }
+  const [best, ...others] = list;
+  box.innerHTML = `<button class="ab-best" data-i="0"><i style="background-image:${esc(cssUrl(best.cover))}"></i><span><b>${esc(best.name)}</b><small>Артист${best.source === 'sc' ? ' в SoundCloud' : best.genre ? ', ' + esc(best.genre) : ''}</small></span></button>
+    ${others.length ? `<div class="ab-row">${others.map((a, i) => `<button class="ab-item" data-i="${i + 1}"><i style="background-image:${esc(cssUrl(a.cover))}"></i><b>${esc(a.name)}</b></button>`).join('')}</div>` : ''}
+    ${''}<div class="ab-label">Треки</div>`;
+  $$('[data-i]', box).forEach(b => b.addEventListener('click', () => { const a = list[+b.dataset.i]; openArtist(a.source, a.id); }));
+}
 
 function renderLocked(list) {
   const box = $('#lockedBlock');

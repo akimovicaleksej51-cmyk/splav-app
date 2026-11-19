@@ -2,6 +2,7 @@ import UIKit
 import AVFoundation
 import WebKit
 import Capacitor
+import MediaPlayer
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -44,7 +45,31 @@ public class SplavNativePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "loginEval", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "clearLogin", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "openUrl", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "remoteCommands", returnType: CAPPluginReturnPromise),
     ]
+
+    private var remoteReady = false
+
+    /// Экран блокировки: «трек назад / трек вперёд» вместо перемотки на 10 секунд
+    @objc func remoteCommands(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            let cc = MPRemoteCommandCenter.shared()
+            cc.skipForwardCommand.isEnabled = false
+            cc.skipBackwardCommand.isEnabled = false
+            cc.seekForwardCommand.isEnabled = false
+            cc.seekBackwardCommand.isEnabled = false
+            cc.nextTrackCommand.isEnabled = true
+            cc.previousTrackCommand.isEnabled = true
+            if !self.remoteReady {
+                self.remoteReady = true
+                cc.nextTrackCommand.addTarget { [weak self] _ in self?.notifyListeners("remote", data: ["cmd": "next"]); return .success }
+                cc.previousTrackCommand.addTarget { [weak self] _ in self?.notifyListeners("remote", data: ["cmd": "prev"]); return .success }
+                cc.skipForwardCommand.addTarget { [weak self] _ in self?.notifyListeners("remote", data: ["cmd": "next"]); return .success }
+                cc.skipBackwardCommand.addTarget { [weak self] _ in self?.notifyListeners("remote", data: ["cmd": "prev"]); return .success }
+            }
+            call.resolve()
+        }
+    }
 
     private var login: LoginViewController?
 
@@ -108,7 +133,9 @@ public class SplavNativePlugin: CAPPlugin, CAPBridgedPlugin {
     }
 }
 
-class LoginViewController: UIViewController, WKNavigationDelegate, UIAdaptivePresentationControllerDelegate {
+let safariUA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
+
+class LoginViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, UIAdaptivePresentationControllerDelegate {
     let webView: WKWebView
     private let startURL: URL
     var onNavigate: ((String) -> Void)?
@@ -119,7 +146,9 @@ class LoginViewController: UIViewController, WKNavigationDelegate, UIAdaptivePre
     init(url: URL, title: String) {
         let cfg = WKWebViewConfiguration()
         cfg.websiteDataStore = .nonPersistent()
+        cfg.preferences.javaScriptCanOpenWindowsAutomatically = true
         webView = WKWebView(frame: .zero, configuration: cfg)
+        webView.customUserAgent = safariUA
         startURL = url
         super.init(nibName: nil, bundle: nil)
         self.title = title
@@ -132,6 +161,7 @@ class LoginViewController: UIViewController, WKNavigationDelegate, UIAdaptivePre
         overrideUserInterfaceStyle = .dark
         navigationItem.leftBarButtonItem = UIBarButtonItem(title: "Отмена", style: .plain, target: self, action: #selector(cancel))
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         webView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(webView)
         NSLayoutConstraint.activate([
@@ -153,6 +183,22 @@ class LoginViewController: UIViewController, WKNavigationDelegate, UIAdaptivePre
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         if let u = webView.url?.absoluteString { onNavigate?(u) }
+    }
+
+    // окна «Войти через Google / Apple» открываются поверх, в том же хранилище
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        let popup = WKWebView(frame: .zero, configuration: configuration)
+        popup.customUserAgent = safariUA
+        popup.navigationDelegate = self
+        popup.uiDelegate = self
+        let vc = UIViewController()
+        vc.view = popup
+        vc.title = title
+        navigationController?.pushViewController(vc, animated: true)
+        return popup
+    }
+    func webViewDidClose(_ webView: WKWebView) {
+        if webView !== self.webView { navigationController?.popToViewController(self, animated: true) }
     }
 
     @objc private func cancel() { closeProgrammatically() }

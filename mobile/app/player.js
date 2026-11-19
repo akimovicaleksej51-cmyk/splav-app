@@ -3,6 +3,7 @@ import { API } from './api.js';
 import { $, $$, esc, fmt, cssUrl, key, ico, toast, haptic, state, sheet, actions, trackHead, trackRow, bindRows, refreshRows, SOURCE } from './lib.js';
 import { openArtist, trackMenu, renderWave } from './views.js';
 import { room, roomPublish, roomTrack } from './together.js';
+import { Native, isNative } from '../core/native.js';
 
 export const audio = new Audio();
 audio.preload = 'auto';
@@ -120,6 +121,7 @@ export async function loadMoreWave() {
     const list = await API.waveNext({ lastYaId: lastYa ? lastYa.id.slice(3) : undefined, mix: state.wave.mix, likedSc: state.likes.sc.map(t => t.rawId), settings: effectiveWave(), station: state.station });
     const have = new Set(state.queue.map(key));
     state.queue.push(...list.filter(t => !have.has(key(t)) && t.available !== false));
+    document.dispatchEvent(new Event('now-changed'));
   } catch (e) { toast('Волна: ' + e.message); }
   finally { state.loadingMore = false; }
 }
@@ -158,6 +160,7 @@ export async function dislike(t) {
 function renderLikeState() {
   const on = !!(state.current && state.liked.has(key(state.current)));
   const b = $('#plLike'); if (b) { b.classList.toggle('on', on); }
+  const w = $('#wvLike'); if (w) w.classList.toggle('on', on);
 }
 
 /* ---------- мини-плеер ---------- */
@@ -297,7 +300,7 @@ export function syncPlaying() {
   const icon = ico(p ? 'pause' : 'play');
   $('#miniPlay').innerHTML = icon; $('#plPlay').innerHTML = icon;
   if ('mediaSession' in navigator) navigator.mediaSession.playbackState = p ? 'playing' : 'paused';
-  const wp = $('#wavePlay'); if (wp) wp.innerHTML = ico(p && state.mode === 'wave' ? 'pause' : 'play');
+  document.dispatchEvent(new Event('play-state'));
 }
 function updateTime() {
   const c = curTime(), d = curDur(), f = d ? Math.min(1, c / d) : 0;
@@ -365,13 +368,27 @@ function setMediaSession(t) {
     navigator.mediaSession.metadata = new MediaMetadata({ title: t.title, artist: t.artist, album: t.album || 'Сплав', artwork: t.cover ? [{ src: t.cover, sizes: '512x512', type: 'image/jpeg' }] : [] });
   } catch {}
 }
-if ('mediaSession' in navigator) {
-  const ms = navigator.mediaSession;
-  const h = (a, f) => { try { ms.setActionHandler(a, f); } catch {} };
-  h('play', () => audio.play());
-  h('pause', () => audio.pause());
-  h('nexttrack', () => next(true));
-  h('previoustrack', () => prev());
-  h('seekto', d => seekTo(d.seekTime));
+// кнопки «трек назад / вперёд» на экране блокировки (без двойного срабатывания)
+let lastRemote = 0;
+const remote = fn => () => { if (Date.now() - lastRemote < 800) return; lastRemote = Date.now(); fn(); };
+const remoteNext = remote(() => next(true)), remotePrev = remote(() => prev());
+function setupMediaHandlers() {
+  if ('mediaSession' in navigator) {
+    const ms = navigator.mediaSession;
+    const h = (a, f) => { try { ms.setActionHandler(a, f); } catch {} };
+    h('play', () => audio.play());
+    h('pause', () => audio.pause());
+    h('nexttrack', remoteNext);
+    h('previoustrack', remotePrev);
+    h('seekforward', null);
+    h('seekbackward', null);
+    h('seekto', d => seekTo(d.seekTime));
+  }
+  if (isNative) Native.remoteCommands().catch(() => {});
 }
+setupMediaHandlers();
+if (isNative) Native.addListener('remote', e => (e.cmd === 'next' ? remoteNext : remotePrev)());
+// WebKit сам возвращает перемотку при смене трека, поэтому переставляем кнопки после старта
+audio.addEventListener('playing', () => { setupMediaHandlers(); setTimeout(setupMediaHandlers, 600); setTimeout(setupMediaHandlers, 2000); });
+audio.addEventListener('pause', () => setTimeout(setupMediaHandlers, 300));
 export { roomTrack };

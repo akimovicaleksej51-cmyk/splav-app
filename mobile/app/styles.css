@@ -139,25 +139,49 @@ body.paused .eq i { animation-play-state: paused; }
 .load-more { display: block; margin: 8px auto 0; }
 
 /* ---------- волна ---------- */
-.wave-hero { position: relative; height: calc(100vh - var(--tabbar) - var(--mini) - 70px); min-height: 460px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: calc(var(--st) + 20px) 24px 20px; text-align: center; }
-.wave-top { position: absolute; top: calc(var(--st) + 8px); left: 20px; right: 20px; display: flex; align-items: center; justify-content: space-between; }
+.wave-hero { --wc: 181,29,48; position: relative; min-height: calc(100vh - var(--tabbar) - var(--mini) - 40px); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: calc(var(--st) + 56px) 24px 18px; text-align: center; overflow: hidden; }
+.wave-top { position: absolute; top: calc(var(--st) + 8px); left: 20px; right: 20px; z-index: 3; display: flex; align-items: center; justify-content: space-between; }
 .wave-logo { font-family: var(--display); font-weight: 800; font-size: 17px; letter-spacing: .02em; display: flex; align-items: center; gap: 8px; }
 .wave-logo i { width: 8px; height: 8px; border-radius: 50%; background: var(--blood); box-shadow: 0 0 14px var(--blood); }
-.orb { position: relative; width: min(66vw, 280px); aspect-ratio: 1; margin-bottom: 30px; }
+.wv-stage { position: relative; width: min(84vw, 360px); aspect-ratio: 1; margin-bottom: 10px; }
+.wv-glow { position: absolute; inset: -30%; border-radius: 50%; background: radial-gradient(circle, rgba(var(--wc), .55), rgba(var(--wc), .12) 45%, transparent 68%); filter: blur(10px); transition: background 1.2s; animation: breathe 7s ease-in-out infinite; }
+@keyframes breathe { 50% { transform: scale(1.08); opacity: .8; } }
+.wv-rings { position: absolute; inset: 0; pointer-events: none; }
+.wv-rings i { position: absolute; inset: 18%; border-radius: 50%; border: 1px solid rgba(var(--wc), .55); opacity: 0; }
+body.playing .wave-hero .wv-rings i { animation: ring 4.5s cubic-bezier(.2,.6,.3,1) infinite; }
+.wv-rings i:nth-child(2) { animation-delay: -1.5s !important; } .wv-rings i:nth-child(3) { animation-delay: -3s !important; }
+@keyframes ring { 0% { transform: scale(.75); opacity: 0; } 15% { opacity: .7; } 100% { transform: scale(1.75); opacity: 0; } }
+.wv-sparks { position: absolute; inset: -20% -10%; pointer-events: none; }
+.wv-sparks i { position: absolute; left: var(--x); bottom: 0; width: var(--s); height: var(--s); border-radius: 50%; background: rgba(255,200,205,.85); box-shadow: 0 0 8px rgba(var(--wc), .9); opacity: 0; animation: spark var(--d) linear var(--dl) infinite; }
+body.playing .wave-hero .wv-sparks i { animation-duration: calc(var(--d) * .6); }
+@keyframes spark { 0% { transform: translate(0, 0); opacity: 0; } 15% { opacity: .9; } 85% { opacity: .5; } 100% { transform: translate(14px, -360px); opacity: 0; } }
+.orb { position: absolute; inset: 14%; transition: opacity .8s, transform .8s var(--spring); }
 .orb i { position: absolute; inset: 0; border-radius: 50%; filter: blur(22px); opacity: .9; animation: orbSpin 18s linear infinite; }
 .orb i:nth-child(1) { background: radial-gradient(circle at 30% 30%, #ff3b55, #6e0c18 55%, transparent 70%); }
 .orb i:nth-child(2) { inset: 8%; background: radial-gradient(circle at 70% 60%, #b51d30, #2a0610 60%, transparent 72%); animation-duration: 11s; animation-direction: reverse; mix-blend-mode: screen; }
 .orb i:nth-child(3) { inset: 22%; background: radial-gradient(circle at 50% 40%, rgba(255,210,215,.55), transparent 60%); animation-duration: 7s; filter: blur(16px); }
-.orb::after { content: ''; position: absolute; inset: 14%; border-radius: 50%; border: 1px solid rgba(255,255,255,.07); }
 body.playing .orb { animation: orbBeat 1.9s ease-in-out infinite; }
+.wave-hero.live .orb { opacity: 0; transform: scale(.6); }
 @keyframes orbSpin { to { transform: rotate(360deg); } }
 @keyframes orbBeat { 50% { transform: scale(1.06); } }
-.wave-title { font-family: var(--display); font-weight: 800; font-size: 34px; letter-spacing: -.02em; line-height: 1.05; }
-.wave-sub { margin-top: 10px; color: var(--fog); font-weight: 600; font-size: 15px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 21px; }
-.wave-play { margin-top: 24px; width: 76px; height: 76px; border-radius: 50%; background: var(--bone); color: var(--obsidian); display: grid; place-items: center; box-shadow: 0 0 0 0 rgba(var(--blood-rgb), .4); transition: transform .2s var(--ease); }
+/* фото артиста растворяется в фоне — без рамки и подложки */
+.wv-art { position: absolute; inset: 0; background: center/cover no-repeat; -webkit-mask-image: radial-gradient(closest-side, #000 52%, rgba(0,0,0,.6) 72%, transparent 100%); mask-image: radial-gradient(closest-side, #000 52%, rgba(0,0,0,.6) 72%, transparent 100%); opacity: 0; transform: scale(.92); transition: opacity 1s, transform 1.2s var(--spring); }
+.wv-art.on { opacity: 1; transform: none; }
+body.playing .wv-art.on { animation: kb 14s ease-in-out infinite alternate; }
+@keyframes kb { to { transform: scale(1.07) translateY(-6px); } }
+.wave-title { font-family: var(--display); font-weight: 800; font-size: 34px; letter-spacing: -.02em; line-height: 1.05; max-width: 100%; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; position: relative; z-index: 2; }
+.wave-sub { position: relative; z-index: 2; margin-top: 8px; color: var(--fog); font-weight: 600; font-size: 15.5px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 22px; }
+.wv-ctrl { position: relative; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 18px; margin-top: 20px; }
+.wv-side { width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.07); color: var(--bone); }
+.wv-side:active { transform: scale(.92); }
+.wv-side svg { width: 23px; height: 23px; }
+#wvNext svg { fill: currentColor; stroke: none; }
+.wv-side.on { color: var(--blood-hi); }
+.wv-side.on svg { fill: currentColor; animation: pop .4s var(--ease); }
+.wave-play { width: 76px; height: 76px; border-radius: 50%; background: var(--bone); color: var(--obsidian); display: grid; place-items: center; transition: transform .2s var(--ease); box-shadow: 0 10px 40px rgba(var(--wc), .45); }
 .wave-play:active { transform: scale(.93); }
 .wave-play svg { width: 32px; height: 32px; fill: currentColor; stroke: none; }
-.wave-actions { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; justify-content: center; }
+.wave-actions { position: relative; z-index: 2; display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; justify-content: center; }
 .station { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-height: 36px; padding: 0 6px 0 14px; border-radius: 999px; background: rgba(var(--blood-rgb), .18); border: 1px solid rgba(var(--blood-rgb), .45); font-weight: 700; font-size: 13.5px; }
 .station span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .station button { width: 30px; height: 30px; display: grid; place-items: center; }

@@ -17,27 +17,51 @@ const WAVE_OPTIONS = {
   language: ['Язык', [['any', 'Любой'], ['russian', 'Русский'], ['not-russian', 'Иностранный'], ['without-words', 'Без слов']]],
 };
 const GENRES = [['rap', 'Рэп'], ['phonk', 'Фонк'], ['pop', 'Поп'], ['indie', 'Инди'], ['rock', 'Рок'], ['electronic', 'Электроника'], ['techno', 'Техно'], ['house', 'Хаус'], ['lofi', 'Лоу-фай'], ['ambient', 'Эмбиент'], ['jazz', 'Джаз'], ['classical', 'Классика'], ['rnb', 'R&B']];
+const MOODS = [['all', 'Любое'], ['active', 'Бодрое'], ['fun', 'Весёлое'], ['calm', 'Спокойное'], ['sad', 'Грустное']];
 export function renderWave() {
   const el = $('#tab-wave');
-  const playingWave = state.mode === 'wave' && state.current;
   const settingsSummary = Object.entries(WAVE_OPTIONS).map(([k, [, opts]]) => (opts.find(o => o[0] === state.wave[k]) || opts[0])).filter(o => !['default', 'all', 'any'].includes(o[0])).map(o => o[1]).join(', ');
   const needOnb = state.guest && !(state.prefs.guestGenres || []).length && !state.likes.guest.length;
   el.innerHTML = `
-    <div class="wave-hero">
+    <div class="wave-hero" id="waveHero">
       <div class="wave-top"><div class="wave-logo"><i></i>СПЛАВ</div>${avatarBtn()}</div>
-      <div class="orb"><i></i><i></i><i></i></div>
-      <div class="wave-title">${state.station ? 'Волна' : 'Моя волна'}</div>
-      <div class="wave-sub">${esc(state.waveStatus || (playingWave ? `${state.current.artist} — ${state.current.title}` : state.station ? state.station.label : 'Бесконечный поток музыки под ваш вкус'))}</div>
-      <button class="wave-play" id="wavePlay" aria-label="Слушать волну">${ico(playingWave && isPlaying() ? 'pause' : 'play')}</button>
+      <div class="wv-stage" id="wvStage">
+        <div class="wv-glow"></div>
+        <div class="wv-rings"><i></i><i></i><i></i></div>
+        <div class="wv-sparks">${Array.from({ length: 14 }, (_, i) => `<i style="--x:${(i * 37) % 100}%;--d:${6 + (i * 7) % 9}s;--dl:${-(i * 1.3).toFixed(1)}s;--s:${2 + (i % 3)}px"></i>`).join('')}</div>
+        <div class="orb" id="wvOrb"><i></i><i></i><i></i></div>
+        <div class="wv-art" id="wvArtA"></div><div class="wv-art" id="wvArtB"></div>
+      </div>
+      <button class="wave-title" id="wvTitle"></button>
+      <div class="wave-sub" id="wvSub"></div>
+      <div class="wv-ctrl" id="wvCtrl">
+        <button class="wv-side" id="wvDislike" aria-label="Не нравится">${ico('ban')}</button>
+        <button class="wave-play" id="wavePlay" aria-label="Слушать волну">${ico('play')}</button>
+        <button class="wv-side" id="wvNext" aria-label="Следующий трек">${ico('next')}</button>
+        <button class="wv-side" id="wvLike" aria-label="Нравится">${ico('heart')}</button>
+      </div>
       <div class="wave-actions">
         ${state.station ? `<span class="station"><span>Волна ${esc(state.station.label)}</span><button id="stOff" aria-label="Вернуться к «Моей волне»">${ico('close')}</button></span>` : ''}
         <button class="btn sm" id="waveSet">${ico('sliders')}${settingsSummary ? esc(settingsSummary) : 'Настроить'}</button>
       </div>
     </div>
     <div id="updWave"></div>
-    ${needOnb ? `<div class="onb"><div class="onb-title">Что вам нравится?</div><div class="onb-text">Отметьте пару жанров, и волна начнётся с них. Без входа звучит музыка из SoundCloud, Audius и Jamendo.</div><div class="chips wrap" id="obG">${GENRES.map(([k, n]) => `<button class="chip" data-g="${k}">${n}</button>`).join('')}</div><button class="btn primary wide" id="obGo">Слушать волну</button><button class="btn ghost wide" id="obLogin" style="margin-top:6px">У меня есть Яндекс или Звук</button></div>` : ''}`;
+    ${needOnb ? `<div class="onb"><div class="onb-title">Что вам нравится?</div><div class="onb-text">Отметьте пару жанров, и волна начнётся с них. Без входа звучит музыка из SoundCloud, Audius и Jamendo.</div><div class="chips wrap" id="obG">${GENRES.map(([k, n]) => `<button class="chip" data-g="${k}">${n}</button>`).join('')}</div><button class="btn primary wide" id="obGo">Слушать волну</button><button class="btn ghost wide" id="obLogin" style="margin-top:6px">У меня есть Яндекс или Звук</button></div>` : ''}
+    <div class="sec-title">Настроение</div>
+    <div class="chips" id="wvMood">${MOODS.map(([v, n]) => `<button class="chip${state.wave.moodEnergy === v ? ' active' : ''}" data-v="${v}">${n}</button>`).join('')}</div>
+    <div id="wvNextBox"></div>`;
   $('#wavePlay', el).onclick = () => { haptic(); if (state.mode === 'wave' && state.current) togglePlay(); else startWave(state.station); };
+  $('#wvNext', el).onclick = async () => { haptic(); (await import('./player.js')).next(true); };
+  $('#wvLike', el).onclick = () => state.current && toggleLike(state.current);
+  $('#wvDislike', el).onclick = () => state.current && dislike(state.current);
+  $('#wvTitle', el).onclick = () => { const t = state.mode === 'wave' && state.current; if (!t) return; const a = t.artists && t.artists[0]; if (a && (a.source === 'ya' || a.source === 'sc')) openArtist(a.source, a.id, a.name); else openPlayer(); };
+  $('#wvStage', el).onclick = () => { if (state.mode === 'wave' && state.current) openPlayer(); };
   $('#waveSet', el).onclick = openWaveSettings;
+  $$('#wvMood .chip', el).forEach(b => b.onclick = () => {
+    haptic(); state.wave.moodEnergy = b.dataset.v;
+    $$('#wvMood .chip', el).forEach(c => c.classList.toggle('active', c === b));
+    applyWaveSettings(); if (state.mode !== 'wave' || !state.current) startWave(state.station);
+  });
   import('./main.js').then(m => m.renderUpdate($('#updWave'))).catch(() => {});
   const so = $('#stOff', el); if (so) so.onclick = () => { state.station = null; startWave(); };
   if (needOnb) {
@@ -49,8 +73,51 @@ export function renderWave() {
     };
     $('#obLogin', el).onclick = openProfile;
   }
+  wvShown = null; updateWaveNow();
 }
-document.addEventListener('now-changed', () => { if (state.tab === 'wave') { const s = $('#tab-wave .wave-sub'); if (s && state.mode === 'wave' && state.current) s.textContent = `${state.current.artist} — ${state.current.title}`; } });
+
+// фото артиста: у Яндекса и SoundCloud берём портрет, у остальных — обложку
+const photoCache = new Map();
+async function artistPhoto(t) {
+  const a = t.artists && t.artists[0];
+  if (!a || !(a.source === 'ya' || a.source === 'sc')) return t.cover;
+  const k = a.source + ':' + a.id;
+  if (!photoCache.has(k)) photoCache.set(k, API.artist(a.source, a.id).then(r => (r && r.cover) || t.cover).catch(() => t.cover));
+  return photoCache.get(k);
+}
+let wvShown = null, wvFlip = false;
+export async function updateWaveNow() {
+  const el = $('#tab-wave'); const hero = $('#waveHero', el); if (!hero) return;
+  const t = state.mode === 'wave' ? state.current : null;
+  hero.classList.toggle('live', !!t);
+  $('#wvTitle', el).textContent = t ? (t.artist || '').split(',')[0] : (state.station ? 'Волна' : 'Моя волна');
+  $('#wvSub', el).textContent = state.waveStatus || (t ? t.title : state.station ? state.station.label : 'Бесконечный поток музыки под ваш вкус');
+  $('#wavePlay', el).innerHTML = ico(t && isPlaying() ? 'pause' : 'play');
+  $('#wvDislike', el).classList.toggle('hidden', !t || t.source !== 'ya' || !state.accounts.ya);
+  $('#wvNext', el).classList.toggle('hidden', !t);
+  const lk = $('#wvLike', el); lk.classList.toggle('hidden', !t); lk.classList.toggle('on', !!(t && state.liked.has(key(t))));
+  // «дальше в волне»
+  const nb = $('#wvNextBox', el);
+  const up = t ? state.queue.slice(state.qi + 1, state.qi + 5) : [];
+  nb.innerHTML = up.length ? `<div class="sec-title">Дальше в волне</div><div class="list" id="wvUp"></div>` : '';
+  if (up.length) renderList($('#wvUp', nb), up, { onPlay: i => { state.qi = state.qi + 1 + i; import('./player.js').then(m => m.playTrack(state.queue[state.qi])); }, onMore: x => trackMenu(x) });
+  // цвет свечения
+  if (t && t.cover) API.coverColor(t.cover).then(c => { if (c) hero.style.setProperty('--wc', `${c.join(',')}`); }).catch(() => {});
+  const k = t ? key(t) : null;
+  if (k === wvShown) return;
+  wvShown = k;
+  const show = $('#' + (wvFlip ? 'wvArtA' : 'wvArtB'), el), hide = $('#' + (wvFlip ? 'wvArtB' : 'wvArtA'), el);
+  wvFlip = !wvFlip;
+  if (!t) { show.classList.remove('on'); hide.classList.remove('on'); return; }
+  const url = await artistPhoto(t);
+  if (wvShown !== k) return;
+  const img = new Image();
+  img.onload = img.onerror = () => { if (wvShown !== k) return; show.style.backgroundImage = cssUrl(url); show.classList.add('on'); hide.classList.remove('on'); };
+  img.src = url || '';
+}
+document.addEventListener('now-changed', () => updateWaveNow());
+document.addEventListener('play-state', () => { const b = $('#wavePlay'); if (b) b.innerHTML = ico(state.mode === 'wave' && state.current && isPlaying() ? 'pause' : 'play'); });
+document.addEventListener('likes-changed', () => { const lk = $('#wvLike'); if (lk && state.current) lk.classList.toggle('on', state.liked.has(key(state.current))); });
 function openWaveSettings() {
   const body = Object.entries(WAVE_OPTIONS).map(([k, [label, opts]]) => `<div class="opt-group"><div class="opt-label">${label}</div><div class="chips wrap" data-k="${k}">${opts.map(([v, n]) => `<button class="chip${state.wave[k] === v ? ' active' : ''}" data-v="${v}">${n}</button>`).join('')}</div></div>`).join('');
   const s = sheet(`<div class="sh-head"><div class="sh-title">Настроить волну</div></div><div class="sh-body">${body}
