@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Сплав</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <main id="tabs">
+    <section class="tab active" data-tab="wave" id="tab-wave"></section>
+    <section class="tab" data-tab="search" id="tab-search"></section>
+    <section class="tab" data-tab="library" id="tab-library"></section>
+    <section class="tab" data-tab="together" id="tab-together"></section>
+  </main>
+  <div id="stack"></div>
+
+  <div class="mini hidden" id="mini">
+    <div class="mini-fill" id="miniFill"></div>
+    <div class="mini-cover" id="miniCover"></div>
+    <div class="mini-meta"><div class="mini-title" id="miniTitle"></div><div class="mini-artist" id="miniArtist"></div></div>
+    <button class="mini-btn" id="miniPlay" aria-label="Играть или пауза"></button>
+    <button class="mini-btn" id="miniNext" aria-label="Следующий трек"></button>
+  </div>
+
+  <nav class="tabbar" id="tabbar">
+    <button class="tb active" data-tab="wave"><span class="tb-ico" data-ico="wave"></span><span>Волна</span></button>
+    <button class="tb" data-tab="search"><span class="tb-ico" data-ico="search"></span><span>Поиск</span></button>
+    <button class="tb" data-tab="together"><span class="tb-ico" data-ico="people"></span><span>Комната</span><i class="tb-count hidden" id="tbCount"></i></button>
+    <button class="tb" data-tab="library"><span class="tb-ico" data-ico="heart"></span><span>Моя музыка</span></button>
+  </nav>
+
+  <div class="player" id="player" aria-hidden="true"></div>
+  <div class="sheets" id="sheets"></div>
+  <div class="toast" id="toast"></div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

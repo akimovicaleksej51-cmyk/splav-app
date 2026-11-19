@@ -1,0 +1,16 @@
+{
+  "appId": "com.splav.mobile",
+  "appName": "Сплав",
+  "webDir": "www",
+  "backgroundColor": "#060608",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#060608",
+    "allowsLinkPreview": false,
+    "scrollEnabled": true
+  },
+  "plugins": {
+    "CapacitorHttp": { "enabled": true },
+    "SplashScreen": { "launchAutoHide": false, "backgroundColor": "#060608", "showSpinner": false }
+  }
+}

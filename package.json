@@ -1,0 +1,29 @@
+{
+  "name": "splav",
+  "version": "1.7.0",
+  "description": "Яндекс Музыка, SoundCloud и ваши файлы в одном плеере",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^33.4.11"
+  },
+  "dependencies": {
+    "@fontsource-variable/manrope": "^5.3.0",
+    "@fontsource-variable/roboto-flex": "^5.3.0",
+    "@fontsource-variable/unbounded": "^5.3.0",
+    "@fontsource/cormorant-garamond": "^5.3.0",
+    "@fontsource/golos-text": "^5.3.0",
+    "@fontsource/montserrat": "^5.3.0",
+    "@fontsource/playfair-display": "^5.3.0",
+    "hls.js": "^1.7.4",
+    "music-metadata": "^7.14.0",
+    "three": "^0.159.0"
+  },
+  "productName": "Сплав"
+}

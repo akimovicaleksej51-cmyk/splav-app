@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: file: data:; media-src 'self' https: file: blob: splav:; connect-src 'self' https: blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>Сплав</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="drag"></div>
+    <div class="logo"><span class="deco">СПЛАВ</span></div>
+    <nav>
+      <button class="nav-item active" data-page="wave">
+        <svg viewBox="0 0 24 24"><path d="M2 12c2.5 0 2.5-5 5-5s2.5 10 5 10 2.5-10 5-10 2.5 5 5 5"/></svg>
+        Волна
+      </button>
+      <button class="nav-item" data-page="search">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+        Поиск
+      </button>
+      <button class="nav-item" data-page="library">
+        <svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z"/></svg>
+        Моя музыка
+      </button>
+      <button class="nav-item" data-page="friends">
+        <svg viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19c.6-3 2.9-4.6 5.5-4.6s4.9 1.6 5.5 4.6"/><circle cx="16.5" cy="9.5" r="2.6"/><path d="M15.5 14.6c2.6-.3 4.6 1 5.1 3.9"/></svg>
+        Вместе
+        <span class="nav-count hidden" id="frCount"></span>
+      </button>
+    </nav>
+    <button class="room-bar hidden" id="roomBar"></button>
+    <div class="sidebar-foot">
+      <button class="profile-btn" id="openSettings" title="Профиль и настройки">
+        <span class="avatar" id="avatar">?</span>
+        <span class="profile-meta"><span class="profile-name" id="profileName">Профиль</span><span class="sources" id="sourceDots"></span></span>
+      </button>
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="drag top-drag"></div>
+    <div class="update-bar hidden" id="updateBar"></div>
+
+    <!-- ВОЛНА -->
+    <section class="page active" id="page-wave">
+      <button class="wrapped-pill hidden" id="wrappedPill"></button>
+      <div class="wave-stage">
+        <div class="wave-bgword" aria-hidden="true">ВОЛНА</div>
+        <canvas id="wave3d"></canvas>
+        <div class="lite-orb" aria-hidden="true"></div>
+        <div class="station-chip hidden" id="stationChip"><span></span><button title="Вернуться к «Моей волне»"><svg viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"/></svg></button></div>
+        <div class="wave-center">
+          <div class="wave-title display" id="waveTitle">Моя волна</div>
+          <div class="wave-now" id="waveNow">Бесконечный поток музыки под ваш вкус</div>
+          <button class="wave-play" id="wavePlay" aria-label="Слушать волну">
+            <svg class="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>
+            <svg class="i-pause" viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="wave-settings" id="waveSettings">
+        <div class="car" data-key="diversity" data-label="Характер"></div>
+        <div class="car" data-key="moodEnergy" data-label="Настроение"></div>
+        <div class="car" data-key="language" data-label="Язык"></div>
+        <button class="switch" id="mixToggle"><span class="knob"></span>SoundCloud в волне</button>
+      </div>
+      <div class="onboarding hidden" id="onboarding">
+        <div class="ob-title">Что вам нравится?</div>
+        <div class="ob-text">Отметьте пару жанров, и волна начнётся с них. Дальше она учится на ваших лайках и пропусках. Без входа звучит независимая музыка из SoundCloud, Audius и Jamendo.</div>
+        <div class="ob-genres" id="obGenres"></div>
+        <div class="ob-actions">
+          <button class="btn primary" id="obStart">Слушать волну</button>
+          <button class="btn ghost" id="obLogin">У меня есть Яндекс, Звук или Apple Music</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ПОИСК -->
+    <section class="page" id="page-search">
+      <header class="page-head">
+        <div class="search-box">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+          <input id="searchInput" placeholder="Трек или исполнитель" autocomplete="off" spellcheck="false">
+        </div>
+      </header>
+      <div class="locked-block hidden" id="lockedBlock"></div>
+      <div class="list" id="searchResults">
+        <div class="empty">Ищем сразу в Яндекс Музыке и SoundCloud</div>
+      </div>
+    </section>
+
+    <!-- МОЯ МУЗЫКА -->
+    <section class="page" id="page-library">
+      <header class="page-head lib-head">
+        <div>
+          <h1 class="display">Моя музыка</h1>
+          <div class="sub" id="libCount"></div>
+        </div>
+        <div class="head-actions">
+          <button class="btn primary" id="libPlay"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>Слушать</button>
+          <button class="btn icon" id="libShuffle" title="Перемешать"><svg viewBox="0 0 24 24"><path d="M3 7h3.5c4 0 5 10 9 10H21M3 17h3.5c1.6 0 2.7-1.6 3.6-3.5M21 7h-5.5c-1.6 0-2.7 1.6-3.6 3.5M18 4l3 3-3 3M18 14l3 3-3 3"/></svg></button>
+        </div>
+      </header>
+      <div class="lib-tools">
+        <div class="tabs" id="libTabs">
+          <button class="tab active" data-f="all">Все</button>
+          <button class="tab" data-f="ya">Яндекс</button>
+          <button class="tab" data-f="sc">SoundCloud</button>
+          <button class="tab" data-f="offline">Скачанные</button>
+          <button class="tab" data-f="local">Файлы</button>
+          <button class="tab" data-f="playlists">Плейлисты</button>
+        </div>
+        <input class="filter" id="libFilter" placeholder="Фильтр" spellcheck="false">
+      </div>
+      <div class="off-block hidden" id="libOffline"></div>
+      <div class="list" id="libList"><div class="empty">Загружаем…</div></div>
+    </section>
+
+    <!-- ВМЕСТЕ: комнаты и друзья -->
+    <section class="page" id="page-friends">
+      <header class="page-head">
+        <div>
+          <h1 class="display">Вместе</h1>
+          <div class="sub" id="frMe"></div>
+        </div>
+      </header>
+      <div class="fr-grid">
+        <div class="fr-side">
+          <div class="fr-card" id="togetherCard"></div>
+          <div class="fr-card" id="friendsCard"></div>
+        </div>
+        <div class="fr-chat" id="frChat"></div>
+      </div>
+    </section>
+
+    <!-- АРТИСТ / АЛЬБОМ -->
+    <section class="page" id="page-detail"></section>
+  </main>
+
+  <!-- ПОЛНОЭКРАННЫЙ ПЛЕЕР -->
+  <div class="np hidden" id="np">
+    <div class="np-bg"><div class="np-bg-img" id="npBgImg"></div></div>
+    <div class="drag np-drag"></div>
+    <button class="np-close ibtn" id="npClose" title="Свернуть"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+    <div class="np-body" id="npBody">
+      <div class="np-main">
+        <div class="np-cover-wrap" id="npCoverWrap"><div class="np-cover" id="npCover"></div></div>
+        <div class="np-title display" id="npTitle"></div>
+        <div class="np-artist" id="npArtist"></div>
+        <div class="np-progress"><div class="np-bar" id="npBar"><div class="np-fill" id="npFill"></div></div><div class="np-times"><span id="npCur">0:00</span><span id="npDur">0:00</span></div></div>
+        <div class="np-controls">
+          <button class="ibtn" id="npLike" title="Нравится"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z"/></svg></button>
+          <button class="ibtn np-skip" id="npPrev" title="Назад"><svg viewBox="0 0 24 24"><path d="M7 6v12M18 6l-8 6 8 6z"/></svg></button>
+          <button class="np-play" id="npPlay" title="Играть / пауза"><svg class="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg><svg class="i-pause" viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg></button>
+          <button class="ibtn np-skip" id="npNext" title="Дальше"><svg viewBox="0 0 24 24"><path d="M17 6v12M6 6l8 6-8 6z"/></svg></button>
+          <button class="ibtn" id="npQueue" title="Дальше играет"><svg viewBox="0 0 24 24"><path d="M4 6h12M4 11h12M4 16h7"/><path d="m15 14 5 3-5 3z" fill="currentColor"/></svg></button>
+          <button class="ibtn" id="npRoom" title="Слушать вместе"><svg viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19c.6-3 2.9-4.6 5.5-4.6s4.9 1.6 5.5 4.6"/><circle cx="16.5" cy="9.5" r="2.6"/><path d="M15.5 14.6c2.6-.3 4.6 1 5.1 3.9"/></svg></button>
+          <button class="ibtn" id="npShare" title="Отправить другу"><svg viewBox="0 0 24 24"><path d="M20.5 3.5 3.5 10.6l6.6 2.8 2.8 6.6z"/><path d="m10.1 13.4 4.6-4.6"/></svg></button>
+          <button class="ibtn" id="npSleep" title="Таймер сна и будильник"><svg viewBox="0 0 24 24"><path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10Z"/></svg></button>
+          <button class="ibtn lyr-btn" id="npLyr" title="Текст песни"><svg viewBox="0 0 24 24"><path d="M4 6h11M4 10.5h11M4 15h6"/><path d="M15.5 19.5a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm2-2V9.5l3-1"/></svg></button>
+        </div>
+        <div class="np-vol"><svg viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/></svg><input type="range" id="npVol" min="0" max="1" step="0.01" value="0.8"></div>
+      </div>
+      <div class="np-lyrics" id="npLyrics">
+        <div class="ly-scroll" id="lyScroll"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ПЛЕЕР -->
+  <footer class="player" id="player">
+    <div class="p-track">
+      <div class="p-cover" id="pCover" title="Развернуть плеер"></div>
+      <div class="p-meta" id="pMeta">
+        <div class="p-title" id="pTitle">Ничего не играет</div>
+        <div class="p-artist" id="pArtist"></div>
+      </div>
+      <button class="ibtn" id="pLike" title="Нравится"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z"/></svg></button>
+      <button class="ibtn" id="pDislike" title="Не нравится — больше не предлагать"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="m6.5 6.5 11 11"/></svg></button>
+    </div>
+    <div class="p-center">
+      <div class="p-controls">
+        <button class="ibtn" id="pPrev" title="Назад"><svg viewBox="0 0 24 24"><path d="M7 6v12M18 6l-8 6 8 6z"/></svg></button>
+        <button class="p-play" id="pPlay" title="Играть / пауза">
+          <svg class="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>
+          <svg class="i-pause" viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>
+        </button>
+        <button class="ibtn" id="pNext" title="Дальше"><svg viewBox="0 0 24 24"><path d="M17 6v12M6 6l8 6-8 6z"/></svg></button>
+      </div>
+      <div class="p-progress">
+        <span id="pCur">0:00</span>
+        <div class="bar" id="pBar"><div class="bar-fill" id="pFill"></div></div>
+        <span id="pDur">0:00</span>
+      </div>
+    </div>
+    <div class="p-right">
+      <span class="badge" id="pSource"></span>
+      <button class="ibtn lyr-btn" id="pLyrics" title="Текст песни" disabled><svg viewBox="0 0 24 24"><path d="M4 6h11M4 10.5h11M4 15h6"/><path d="M15.5 19.5a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm2-2V9.5l3-1"/></svg></button>
+      <button class="ibtn" id="pRoom" title="Слушать вместе"><svg viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19c.6-3 2.9-4.6 5.5-4.6s4.9 1.6 5.5 4.6"/><circle cx="16.5" cy="9.5" r="2.6"/><path d="M15.5 14.6c2.6-.3 4.6 1 5.1 3.9"/></svg></button>
+      <button class="ibtn" id="pSleep" title="Таймер сна и будильник"><svg viewBox="0 0 24 24"><path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10Z"/></svg><span class="sleep-badge" id="sleepBadge"></span></button>
+      <button class="ibtn" id="pQueue" title="Дальше играет"><svg viewBox="0 0 24 24"><path d="M4 6h12M4 11h12M4 16h7"/><path d="m15 14 5 3-5 3z" fill="currentColor"/></svg></button>
+      <button class="ibtn" id="pExpand" title="Развернуть плеер" disabled><svg viewBox="0 0 24 24"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg></button>
+      <svg class="vol-ic" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/></svg>
+      <input type="range" id="pVol" min="0" max="1" step="0.01" value="0.8">
+    </div>
+  </footer>
+</div>
+
+<!-- ПРОФИЛЬ И НАСТРОЙКИ -->
+<div class="modal hidden" id="settings">
+  <div class="modal-card set-card">
+    <div class="modal-head">
+      <div class="set-profile"><span class="avatar big" id="avatarBig">?</span><div><h2 class="display" id="setTitle">Профиль</h2><div class="set-sub" id="setSub"></div></div></div>
+      <button class="ibtn" id="closeSettings"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+    </div>
+    <div class="set-tabs" id="setTabs">
+      <button class="tab active" data-t="accounts">Аккаунты</button>
+      <button class="tab" data-t="wave">Волна</button>
+      <button class="tab" data-t="sound">Звук</button>
+      <button class="tab" data-t="integrations">Интеграции</button>
+      <button class="tab" data-t="files">Файлы</button>
+      <button class="tab" data-t="wrapped">Итоги</button>
+    </div>
+
+    <div class="set-pane" data-pane="accounts">
+      <div class="set-row">
+        <div class="set-ic" id="yaIc">Я</div>
+        <div class="set-meta"><div class="set-name">Яндекс Музыка</div><div class="set-sub" id="yaStatus">Не подключено</div></div>
+        <button class="btn" id="yaBtn">Войти</button>
+      </div>
+      <details class="token-box" id="yaTokenBox">
+        <summary>Войти по токену</summary>
+        <div class="token-row"><input id="yaTokenInput" placeholder="OAuth-токен Яндекс Музыки" spellcheck="false"><button class="btn" id="yaTokenSave">Сохранить</button></div>
+      </details>
+      <div class="set-row">
+        <div class="set-ic" id="scIc">SC</div>
+        <div class="set-meta"><div class="set-name">SoundCloud</div><div class="set-sub" id="scStatus">Не подключено</div></div>
+        <button class="btn" id="scBtn">Войти</button>
+      </div>
+      <div class="set-row">
+        <div class="set-ic" id="zvIc">З</div>
+        <div class="set-meta"><div class="set-name">Звук <span class="beta">бета</span></div><div class="set-sub" id="zvStatus">Не подключено</div></div>
+        <button class="btn" id="zvBtn">Войти</button>
+      </div>
+      <details class="token-box" id="zvTokenBox">
+        <summary>Войти по токену</summary>
+        <div class="token-row"><input id="zvTokenInput" placeholder="Токен со страницы zvuk.com/api/tiny/profile" spellcheck="false"><button class="btn" id="zvTokenSave">Сохранить</button></div>
+      </details>
+      <div class="set-row" id="amRow">
+        <div class="set-ic" id="amIc"></div>
+        <div class="set-meta"><div class="set-name">Apple Music</div><div class="set-sub" id="amStatus">Через приложение «Музыка» на этом Mac</div></div>
+        <button class="btn" id="amBtn">Подключить</button>
+      </div>
+      <div class="set-section">Общие</div>
+      <label class="opt"><span><b>Мини-плеер в строке меню</b><small>Обложка, кнопки и строка текста над всеми окнами</small></span><input type="checkbox" class="tgl" data-pref="tray"></label>
+      <div class="opt"><span><b id="appVer">Версия</b><small>Обновления приходят сами, когда указан сервер Сплава</small></span><button class="btn" id="checkUpd">Проверить</button></div>
+      <label class="opt"><span><b>Облегчённый режим</b><small>Без 3D, размытия и лишних анимаций. Для старых Mac и работы от батареи</small></span><input type="checkbox" class="tgl" data-pref="lite"></label>
+    </div>
+
+    <div class="set-pane hidden" data-pane="wave">
+      <label class="opt"><span><b>Подстраивать под время суток</b><small>Когда настроение «Любое»: утром бодрее, поздно вечером и ночью спокойнее</small></span><input type="checkbox" class="tgl" data-pref="timeOfDay"></label>
+      <label class="opt"><span><b>SoundCloud в волне</b><small>Подмешивать треки SoundCloud с учётом языка, настроения и характера</small></span><input type="checkbox" class="tgl" id="mixPref"></label>
+    </div>
+
+    <div class="set-pane hidden" data-pane="sound">
+      <div class="opt col"><span><b>Плавный переход между треками</b><small id="xfLabel">Выключен</small></span><input type="range" class="wide" id="xfRange" min="0" max="10" step="1"></div>
+      <label class="opt"><span><b>Выравнивать громкость</b><small>Тихие и громкие треки Яндекса звучат одинаково</small></span><input type="checkbox" class="tgl" data-pref="normalize"></label>
+      <label class="opt"><span><b>Эквалайзер</b><small>Пять полос и готовые пресеты</small></span><input type="checkbox" class="tgl" data-pref="eqOn"></label>
+      <div class="eq" id="eqBox">
+        <div class="eq-presets" id="eqPresets"></div>
+        <div class="eq-bands" id="eqBands"></div>
+      </div>
+    </div>
+
+    <div class="set-pane hidden" data-pane="integrations">
+      <div class="int-block">
+        <div class="set-row slim">
+          <div class="set-ic">С</div>
+          <div class="set-meta"><div class="set-name">Сервер Сплава</div><div class="set-sub">Для «Слушать вместе» и автообновлений</div></div>
+        </div>
+        <div class="token-row srv"><input id="kServer" placeholder="https://splav-server.vercel.app" spellcheck="false"></div>
+      </div>
+      <div class="int-block">
+        <div class="set-row slim">
+          <div class="set-ic">fm</div>
+          <div class="set-meta"><div class="set-name">Last.fm</div><div class="set-sub" id="lfmStatus">Скробблинг и «Сейчас играет»</div></div>
+          <button class="btn" id="lfmBtn">Подключить</button>
+        </div>
+        <label class="opt"><span><b>Отправлять прослушивания</b><small>Трек засчитывается после половины или 4 минут</small></span><input type="checkbox" class="tgl" data-pref="lastfm"></label>
+        <details class="token-box keys"><summary>Ключи Last.fm</summary>
+          <div class="token-row"><input id="kLfmKey" placeholder="API key" spellcheck="false"><input id="kLfmSecret" placeholder="Shared secret" spellcheck="false"></div>
+          <div class="key-hint">Бесплатно на last.fm/api/account/create. Один раз на приложение</div></details>
+      </div>
+      <div class="int-block">
+        <div class="set-row slim">
+          <div class="set-ic">D</div>
+          <div class="set-meta"><div class="set-name">Discord</div><div class="set-sub">Статус «Слушает» с обложкой и временем</div></div>
+          <input type="checkbox" class="tgl" data-pref="discord">
+        </div>
+        <details class="token-box keys"><summary>ID приложения Discord</summary>
+          <div class="token-row"><input id="kDiscord" placeholder="Application ID" spellcheck="false"></div>
+          <div class="key-hint">Создаётся на discord.com/developers/applications. Название приложения будет в статусе</div></details>
+      </div>
+      <div class="int-block">
+        <div class="set-row slim">
+          <div class="set-ic">J</div>
+          <div class="set-meta"><div class="set-name">Jamendo</div><div class="set-sub" id="jaStatus">Музыка Creative Commons для гостевой волны</div></div>
+        </div>
+        <details class="token-box keys"><summary>Client ID Jamendo</summary>
+          <div class="token-row"><input id="kJamendo" placeholder="Client ID" spellcheck="false"></div>
+          <div class="key-hint">Бесплатно на devportal.jamendo.com</div></details>
+      </div>
+      <div class="set-actions"><button class="btn" id="saveKeys">Сохранить ключи</button></div>
+    </div>
+
+    <div class="set-pane hidden" data-pane="files">
+      <div class="set-section">Папки с музыкой</div>
+      <div class="folders" id="folders"></div>
+      <div class="set-actions">
+        <button class="btn" id="addFolder">Добавить папку</button>
+        <button class="btn ghost" id="openDownloads">Открыть «Скачанное»</button>
+      </div>
+      <div class="set-note">Скачивание доступно для треков SoundCloud, где автор разрешил загрузку. Файлы сохраняются в <span id="dlPath"></span> и играют без интернета.</div>
+    </div>
+
+    <div class="set-pane hidden" data-pane="wrapped">
+      <div class="set-note first">Итоги собираются из того, что вы слушали в Сплаве дольше 30 секунд.</div>
+      <div class="wr-months" id="wrMonths"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ОЧЕРЕДЬ -->
+<aside class="queue hidden" id="queue">
+  <div class="q-head"><span class="q-title">Дальше играет</span><button class="btn ghost" id="qClear">Очистить</button><button class="ibtn" id="qClose"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+  <div class="q-body" id="qBody"></div>
+</aside>
+
+
+<!-- ТАЙМЕР СНА -->
+<div class="sleep-pop hidden" id="sleepPop"></div>
+
+<!-- КОНТЕКСТНОЕ МЕНЮ -->
+<div class="ctx hidden" id="ctx"></div>
+
+<!-- ДИАЛОГ ВВОДА -->
+<div class="modal hidden" id="ask">
+  <div class="modal-card ask-card">
+    <div class="ask-title" id="askTitle"></div>
+    <input class="ask-input" id="askInput" spellcheck="false">
+    <div class="ask-actions"><button class="btn ghost" id="askCancel">Отмена</button><button class="btn primary" id="askOk">Готово</button></div>
+  </div>
+</div>
+
+<!-- ИТОГИ МЕСЯЦА -->
+<div class="modal hidden" id="wrapped">
+  <div class="wr-card" id="wrCard"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="vendor/hls.light.min.js"></script>
+<script src="vendor/three.min.js"></script>
+<script src="wave3d.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

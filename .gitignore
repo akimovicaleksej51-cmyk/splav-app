@@ -1,0 +1,10 @@
+node_modules/
+dist/
+mobile/www/
+mobile/ios/App/App/public/
+mobile/ios/App/build/
+mobile/build/
+mobile/Payload/
+mobile/*.ipa
+probe.js
+.DS_Store

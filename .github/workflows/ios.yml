@@ -1,0 +1,86 @@
+# Сборка Сплава для iPhone: неподписанный .ipa для SideStore (подпись ставит сам SideStore)
+name: iPhone
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['mobile/**', 'src/main.js', 'src/keys.json', '!mobile/source.json']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Версия
+        id: v
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=ios-v$VERSION" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/ios-v$VERSION" >/dev/null 2>&1; then
+            echo "exists=yes" >> "$GITHUB_OUTPUT"; echo "Версия $VERSION уже выпущена: поднимите version в mobile/package.json, чтобы выпустить новую"
+          else
+            echo "exists=no" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Зависимости
+        run: npm ci
+
+      - name: Интерфейс
+        run: node build.mjs --min && npx cap sync ios
+
+      - name: Сборка .ipa
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            MARKETING_VERSION=${{ steps.v.outputs.version }} CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            build | tail -n 40
+          test -d build/Build/Products/Release-iphoneos/App.app
+          mkdir -p Payload && cp -R build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qry Splav.ipa Payload
+          ls -la Splav.ipa
+
+      - name: Сохранить сборку
+        uses: actions/upload-artifact@v4
+        with:
+          name: Splav-ipa
+          path: mobile/Splav.ipa
+
+      - name: Выпуск
+        if: steps.v.outputs.exists == 'no'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.v.outputs.tag }}
+          name: Сплав для iPhone ${{ steps.v.outputs.version }}
+          body_path: mobile/RELEASE.md
+          files: mobile/Splav.ipa
+          make_latest: false
+
+      - name: Обновить источник SideStore
+        if: steps.v.outputs.exists == 'no'
+        run: |
+          git config user.name "splav-bot"
+          git config user.email "splav-bot@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B main origin/main
+          node scripts/source.mjs Splav.ipa "${{ github.repository }}" "${{ steps.v.outputs.tag }}"
+          git add source.json
+          git commit -m "Источник SideStore: версия ${{ steps.v.outputs.version }}" || exit 0
+          git push origin main

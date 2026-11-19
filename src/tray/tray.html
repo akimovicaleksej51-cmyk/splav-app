@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src https: file: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self'">
+<style>
+@font-face { font-family: "Manrope"; src: url(../renderer/fonts/manrope-cyrillic-wght-normal.woff2); font-weight: 200 800; unicode-range: U+0400-04FF; }
+@font-face { font-family: "Manrope"; src: url(../renderer/fonts/manrope-latin-wght-normal.woff2); font-weight: 200 800; unicode-range: U+0000-03FF, U+2000-206F; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { background: transparent; font-family: "Manrope", -apple-system, sans-serif; color: #ecebee; -webkit-font-smoothing: antialiased; user-select: none; overflow: hidden; }
+.card { margin: 6px; height: 136px; border-radius: 16px; background: rgba(8,8,11,.86); border: 1px solid rgba(200,205,225,.08); padding: 14px; display: grid; grid-template-columns: 68px 1fr; gap: 14px; position: relative; overflow: hidden; }
+.glow { position: absolute; inset: -40%; background: radial-gradient(circle at 20% 30%, rgba(var(--c,110,12,24),.55), transparent 60%); filter: blur(20px); transition: background 1s; }
+.cover { position: relative; width: 68px; height: 68px; border-radius: 10px; background: #16161b center/cover; cursor: pointer; }
+.meta { position: relative; min-width: 0; display: flex; flex-direction: column; }
+.title { font-weight: 800; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.artist { color: #9a98a3; font-weight: 600; font-size: 12px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lyric { margin-top: 8px; font-weight: 800; font-size: 12.5px; line-height: 1.3; color: #ecebee; min-height: 32px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; transition: opacity .3s; }
+.lyric.dim { color: #5c5b65; }
+.ctrl { position: relative; grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 22px; margin-top: -4px; }
+button { background: none; border: 0; color: #a3a1ac; cursor: pointer; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; }
+button:hover { color: #fff; }
+button svg { width: 18px; height: 18px; fill: currentColor; }
+#play { width: 34px; height: 34px; background: #ecebee; color: #060608; }
+#play svg { width: 15px; height: 15px; }
+#like.on { color: #b51d30; }
+#like svg { fill: none; stroke: currentColor; stroke-width: 1.8; }
+#like.on svg { fill: currentColor; }
+.i-pause { display: none; } .playing .i-play { display: none; } .playing .i-pause { display: block; }
+.empty { position: relative; grid-column: 1 / -1; display: grid; place-items: center; color: #6b6975; font-weight: 600; font-size: 13px; }
+</style></head>
+<body>
+<div class="card" id="card">
+  <div class="glow"></div>
+  <div class="empty" id="empty">Ничего не играет</div>
+  <div class="cover" id="cover" title="Открыть Сплав" hidden></div>
+  <div class="meta" id="meta" hidden><div class="title" id="title"></div><div class="artist" id="artist"></div><div class="lyric dim" id="lyric"></div></div>
+  <div class="ctrl" id="ctrl" hidden>
+    <button id="like" title="Нравится"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z"/></svg></button>
+    <button id="prev"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zM18 6l-9 6 9 6z"/></svg></button>
+    <button id="play"><svg class="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg><svg class="i-pause" viewBox="0 0 24 24"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg></button>
+    <button id="next"><svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 6l9 6-9 6z"/></svg></button>
+    <button id="open" title="Открыть Сплав"><svg viewBox="0 0 24 24"><path d="M5 5h6v2H7v10h10v-4h2v6H5zM13 5h6v6h-2V8.4l-5.3 5.3-1.4-1.4L15.6 7H13z"/></svg></button>
+  </div>
+</div>
+<script src="tray.js"></script>
+</body></html>
