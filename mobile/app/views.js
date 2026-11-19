@@ -103,7 +103,7 @@ export async function updateWaveNow() {
   $('#wvTitle', el).textContent = t ? (t.artist || '').split(',')[0] : (state.station ? 'Волна' : 'Моя волна');
   $('#wvSub', el).textContent = state.waveStatus || (t ? t.title : state.station ? state.station.label : 'Бесконечный поток музыки под ваш вкус');
   $('#wavePlay', el).innerHTML = ico(t && isPlaying() ? 'pause' : 'play');
-  $('#wvDislike', el).classList.toggle('hidden', !t || t.source !== 'ya' || !state.accounts.ya);
+  $('#wvDislike', el).classList.toggle('hidden', !t);
   $('#wvNext', el).classList.toggle('hidden', !t);
   const lk = $('#wvLike', el); lk.classList.toggle('hidden', !t); lk.classList.toggle('on', !!(t && state.liked.has(key(t))));
   // «дальше в волне»
@@ -442,7 +442,7 @@ export function trackMenu(t, opts = {}) {
     ...(t.artist ? [['radio', 'Волна по артисту', () => startStation(stationFromArtist(a, (t.artist || '').split(',')[0].trim()))]] : []),
     ...(canArtist ? [['user', 'Перейти к артисту', () => { closePlayer(); openArtist(a.source, a.id, a.name); }]] : []),
     ...(t.albumId && t.source === 'ya' ? [['album', 'Перейти к альбому', () => { closePlayer(); openAlbum('ya', t.albumId); }]] : []),
-    ...(t.source === 'ya' && state.accounts.ya ? [null, ['ban', 'Не рекомендовать', () => dislike(t), { danger: true }]] : []),
+    null, ['ban', 'Не нравится, не рекомендовать', () => dislike(t), { danger: true }],
   ]);
 }
 

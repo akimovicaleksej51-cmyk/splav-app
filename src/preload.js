@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('api', {
   waveSettings: (s, eff) => call('waveSettings', s, eff),
   like: (track, on) => call('like', { track, on }),
   dislike: (track) => call('dislike', { track }),
+  undislike: (track) => call('undislike', { track }),
   download: (track) => call('download', track),
   addFolder: () => call('addFolder'),
   removeFolder: (dir) => call('removeFolder', dir),

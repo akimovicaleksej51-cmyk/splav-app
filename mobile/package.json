@@ -1,6 +1,6 @@
 {
   "name": "splav-mobile",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "private": true,
   "scripts": {
     "build": "node build.mjs",
@@ -24,6 +24,6 @@
     "js-sha256": "^0.11.0",
     "path-browserify": "^1.0.1"
   },
-  "releaseNotes": "Волна по жанру, итоги месяца, новинки и чарт в поиске, реакции, приглашение ссылкой. Исправлено автообновление",
+  "releaseNotes": "«Не нравится» для треков из SoundCloud и других сервисов",
   "nativeVersion": "1.1.2"
 }

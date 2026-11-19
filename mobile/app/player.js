@@ -154,7 +154,8 @@ export async function toggleLike(t) {
   } catch (e) { on ? state.liked.delete(k) : state.liked.add(k); renderLikeState(); toast(e.message); }
 }
 export async function dislike(t) {
-  try { await API.dislike(t); toast('Больше не будем это ставить'); } catch (e) { toast(e.message); }
+  haptic('medium');
+  try { await API.dislike(t); toast('Больше не будем это ставить. Нажмите, чтобы отменить', async () => { await API.undislike(t).catch(() => {}); toast('Дизлайк убран'); }); } catch (e) { toast(e.message); }
   if (state.current && key(state.current) === key(t)) next(true);
 }
 function renderLikeState() {
@@ -313,7 +314,7 @@ export function renderNow() {
   $('#plCover').style.backgroundImage = cssUrl(t.cover);
   $('#plTitle').textContent = t.title; $('#plArtist').textContent = t.artist;
   const [a, b] = fromLabel(); $('#plFrom').innerHTML = `${esc(a)}<small>${esc(b)}</small>`;
-  $('#plDislike').classList.toggle('hidden', state.mode !== 'wave' || t.source !== 'ya');
+  $('#plDislike').classList.toggle('hidden', t.source === 'local');
   $('#plLyr').classList.toggle('has-dot', !!t.hasLyrics);
   renderLikeState(); syncPlaying(); updateTime(); refreshRows();
   if (t.cover !== lastCover) {

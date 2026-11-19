@@ -280,7 +280,7 @@ $('#pPrev').addEventListener('click', prev);
 $('#pLike').addEventListener('click', () => state.current && toggleLike(state.current));
 $('#pDislike').addEventListener('click', async () => {
   const t = state.current; if (!t) return;
-  try { await API.dislike(t); toast('Больше не будем предлагать этот трек'); } catch (e) { toast(e.message); }
+  try { await API.dislike(t); toast('Больше не будем предлагать этот трек', async () => { await API.undislike(t).catch(() => {}); toast('Дизлайк убран'); }); } catch (e) { toast(e.message); }
   next(false);
 });
 
@@ -389,7 +389,7 @@ function renderNowPlaying() {
   $('#pSource').classList.toggle('hidden', !t);
   $('#pLike').classList.toggle('on', !!(t && state.liked.has(key(t))));
   $('#pLike').disabled = !t || t.source === 'local';
-  $('#pDislike').disabled = !t || state.mode !== 'wave' || t.source !== 'ya';
+  $('#pDislike').disabled = !t || t.source === 'local' || t.source === 'am';
   if (state.mode === 'wave' && t) setWaveTitle(t.title, t.artist);
   else setWaveTitle('Моя волна', 'Бесконечный поток музыки под ваш вкус');
   npOnTrack();

@@ -569,7 +569,8 @@ async function scWaveTracks(likedIds, ws, need, genres) {
   return picked;
 }
 
-handle('waveNext', async ({ lastYaId, mix, likedSc, settings, station }) => {
+handle('waveNext', async (opts) => notDisliked(await waveNextRaw(opts)));
+async function waveNextRaw({ lastYaId, mix, likedSc, settings, station }) {
   const ws = { ...config.waveSettings, ...(settings || {}) };
   if (station) return stationTracks(station, lastYaId, ws);
   if (!config.yaToken) return guestWave(ws, likedSc || []);
@@ -585,7 +586,7 @@ handle('waveNext', async ({ lastYaId, mix, likedSc, settings, station }) => {
     list = await scWaveTracks(likedSc || [], ws, 8);
   }
   return list;
-});
+}
 handle('waveFeedback', async ({ type, track, played }) => {
   if (!track || track.source !== 'ya') return true;
   if (type === 'radioStarted') return yaWaveFeedback('radioStarted');
@@ -618,12 +619,37 @@ handle('like', async ({ track, on }) => {
   }
   return true;
 });
+// «не нравится» Сплава: работает для любого сервиса (у SoundCloud своего нет).
+// Трек больше не попадёт в волну, а после двух дизлайков артиста волна будет его обходить.
+const dislikeKey = t => t.source + ':' + t.rawId;
+const artistKey = t => String((t.artists && t.artists[0] && t.artists[0].name) || (t.artist || '').split(',')[0]).trim().toLowerCase();
+function dislikes() { return config.dislikes || (config.dislikes = { tracks: {}, artists: {} }); }
+function notDisliked(list) {
+  const D = dislikes();
+  return (list || []).filter(t => t && !D.tracks[dislikeKey(t)] && !((D.artists[artistKey(t)] || 0) >= 2));
+}
 handle('dislike', async ({ track }) => {
-  if (track.source === 'ya') {
+  const D = dislikes();
+  D.tracks[dislikeKey(track)] = Date.now();
+  const ak = artistKey(track); if (ak) D.artists[ak] = (D.artists[ak] || 0) + 1;
+  const keys = Object.keys(D.tracks); if (keys.length > 2000) for (const k of keys.sort((a, b) => D.tracks[a] - D.tracks[b]).slice(0, keys.length - 2000)) delete D.tracks[k];
+  saveConfig();
+  if (track.source === 'ya' && config.yaToken) {
     const uid = await yaEnsureUid();
     const id = track.id.slice(3);
     await ya(`/users/${uid}/dislikes/tracks/add-multiple`, { method: 'POST', form: { 'track-ids': id } });
     yaWaveFeedback('dislike', { trackId: id });
+  }
+  return true;
+});
+handle('undislike', async ({ track }) => {
+  const D = dislikes();
+  delete D.tracks[dislikeKey(track)];
+  const ak = artistKey(track); if (D.artists[ak]) { D.artists[ak]--; if (D.artists[ak] <= 0) delete D.artists[ak]; }
+  saveConfig();
+  if (track.source === 'ya' && config.yaToken) {
+    const uid = await yaEnsureUid();
+    await ya(`/users/${uid}/dislikes/tracks/remove`, { method: 'POST', form: { 'track-ids': track.id.slice(3) } }).catch(() => {});
   }
   return true;
 });

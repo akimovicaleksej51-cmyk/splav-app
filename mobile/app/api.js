@@ -14,6 +14,7 @@ export const API = {
   waveSettings: (s, e) => call('waveSettings', s, e),
   like: (track, on) => call('like', { track, on }),
   dislike: track => call('dislike', { track }),
+  undislike: track => call('undislike', { track }),
   artist: (source, id) => call('artist', { source, id }),
   artistTracks: (source, id) => call('artistTracks', { source, id }),
   album: (source, id) => call('album', { source, id }),
