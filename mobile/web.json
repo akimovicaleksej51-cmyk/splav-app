@@ -1,6 +1,6 @@
 {
-  "version": "1.1.1",
-  "minNative": "1.0.9",
-  "url": "https://github.com/akimovicaleksej51-cmyk/splav-app/releases/download/web-v1.1.1/web.zip",
-  "checksum": "f2ef402f75995a902a73d71ccb0adf51d84cd34c49193e458e615db80bd5003e"
+  "version": "1.1.2",
+  "minNative": "1.1.2",
+  "url": "https://github.com/akimovicaleksej51-cmyk/splav-app/releases/download/web-v1.1.2/web.zip",
+  "checksum": "9c1b1d2ac6c23acaba58ea789611ca6920e13dc9d079409054a7a1f89b1eb24f"
 }
