@@ -59,18 +59,32 @@ async function applyDownloaded() {
     return true;
   } catch { return false; }
 }
+let lastWebError = '';
 async function checkWeb(manual) {
   if (!isNative || !WEB_URL) return false;
+  let step = 'проверка';
   try {
     const m = await (await fetch(fresh(WEB_URL))).json();
     if (!m.version || cmpVer(m.version, pkg.version) <= 0) return false;
-    if (m.minNative && cmpVer(await builtin(), m.minNative) < 0) return false;   // нужна новая нативная часть — это через SideStore
+    step = 'версия основы';
+    const nat = await builtin();
+    if (m.minNative && cmpVer(nat, m.minNative) < 0) return false;   // нужна новая нативная часть — это через SideStore
+    step = 'список загрузок';
     const { bundles } = await CapacitorUpdater.list();
-    if (!(bundles || []).some(b => b.version === m.version && b.status === 'success')) await CapacitorUpdater.download({ url: m.url, version: m.version });
-    if (manual) toast(`Скачана версия ${m.version}. Применяем…`);
-    if (manual || !document.querySelector('body.playing')) await applyDownloaded();
+    if (!(bundles || []).some(b => b.version === m.version && b.status === 'success')) {
+      step = 'скачивание';
+      if (manual) toast(`Скачиваем версию ${m.version}…`);
+      await CapacitorUpdater.download({ url: m.url, version: m.version });
+    }
+    if (manual) toast(`Версия ${m.version} скачана. Применяем…`);
+    step = 'применение';
+    if (manual || !document.body.classList.contains('playing')) await applyDownloaded();
     return true;
-  } catch { return false; }
+  } catch (e) {
+    lastWebError = `${step}: ${e && e.message || e}`;
+    if (manual) { toast('Обновление не скачалось (' + lastWebError + ')'); return true; }
+    return false;
+  }
 }
 export async function checkUpdates(manual) {
   if (await checkWeb(manual)) return;

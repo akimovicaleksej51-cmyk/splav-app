@@ -62,10 +62,19 @@ export const ico = (n, cls = '') => `<svg viewBox="0 0 24 24" class="${cls}">${(
 
 /* ---------- уведомление ---------- */
 let toastT;
+{ // смахнуть всплывающее сообщение вверх
+  const el = document.getElementById('toast'); let y0 = null, dy = 0;
+  el.addEventListener('touchstart', e => { y0 = e.touches[0].clientY; dy = 0; el.style.transition = 'none'; }, { passive: true });
+  el.addEventListener('touchmove', e => { if (y0 === null) return; dy = Math.min(0, e.touches[0].clientY - y0); el.style.transform = `translateY(${dy}px)`; }, { passive: true });
+  el.addEventListener('touchend', () => {
+    if (y0 === null) return; y0 = null; el.style.transition = ''; el.style.transform = '';
+    if (dy < -20) { el._swiped = Date.now(); el.classList.remove('show'); clearTimeout(toastT); }
+  }, { passive: true });
+}
 export function toast(msg, onClick) {
   const el = $('#toast'); el.textContent = msg; el.classList.add('show');
   el.classList.toggle('clickable', !!onClick);
-  el.onclick = onClick ? () => { el.classList.remove('show'); haptic(); onClick(); } : null;
+  el.onclick = onClick ? () => { if (Date.now() - (el._swiped || 0) < 400) return; el.classList.remove('show'); haptic(); onClick(); } : null;
   clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), onClick ? 5500 : 3000);
 }
 

@@ -43,6 +43,7 @@ export function renderWave() {
       <div class="wave-actions">
         ${state.station ? `<span class="station"><span>Волна ${esc(state.station.label)}</span><button id="stOff" aria-label="Вернуться к «Моей волне»">${ico('close')}</button></span>` : ''}
         <button class="btn sm" id="waveSet">${ico('sliders')}${settingsSummary ? esc(settingsSummary) : 'Настроить'}</button>
+        ${settingsSummary || state.station ? `<button class="btn sm" id="waveReset" aria-label="Сбросить настройки волны">${ico('close')}Сбросить</button>` : ''}
       </div>
     </div>
     <div id="updWave"></div>
@@ -57,6 +58,7 @@ export function renderWave() {
   $('#wvTitle', el).onclick = () => { const t = state.mode === 'wave' && state.current; if (!t) return; const a = t.artists && t.artists[0]; if (a && (a.source === 'ya' || a.source === 'sc')) openArtist(a.source, a.id, a.name); else openPlayer(); };
   $('#wvStage', el).onclick = () => { if (state.mode === 'wave' && state.current) openPlayer(); };
   $('#waveSet', el).onclick = openWaveSettings;
+  const wr = $('#waveReset', el); if (wr) wr.onclick = resetWave;
   $$('#wvMood .chip', el).forEach(b => b.onclick = () => {
     haptic(); state.wave.moodEnergy = b.dataset.v;
     $$('#wvMood .chip', el).forEach(c => c.classList.toggle('active', c === b));
@@ -118,13 +120,27 @@ export async function updateWaveNow() {
 document.addEventListener('now-changed', () => updateWaveNow());
 document.addEventListener('play-state', () => { const b = $('#wavePlay'); if (b) b.innerHTML = ico(state.mode === 'wave' && state.current && isPlaying() ? 'pause' : 'play'); });
 document.addEventListener('likes-changed', () => { const lk = $('#wvLike'); if (lk && state.current) lk.classList.toggle('on', state.liked.has(key(state.current))); });
+const WAVE_DEFAULTS = { diversity: 'default', moodEnergy: 'all', language: 'any' };
+const isWaveDefault = () => Object.entries(WAVE_DEFAULTS).every(([k, v]) => state.wave[k] === v);
+// сброс: обычная «Моя волна» без настроек и без станции по треку или артисту
+function resetWave() {
+  const hadStation = !!state.station;
+  Object.assign(state.wave, WAVE_DEFAULTS); state.station = null; haptic('medium');
+  applyWaveSettings();
+  if (hadStation || state.mode !== 'wave') startWave(); else renderWave();
+  toast('Играет обычная «Моя волна»');
+}
 function openWaveSettings() {
   const body = Object.entries(WAVE_OPTIONS).map(([k, [label, opts]]) => `<div class="opt-group"><div class="opt-label">${label}</div><div class="chips wrap" data-k="${k}">${opts.map(([v, n]) => `<button class="chip${state.wave[k] === v ? ' active' : ''}" data-v="${v}">${n}</button>`).join('')}</div></div>`).join('');
-  const s = sheet(`<div class="sh-head"><div class="sh-title">Настроить волну</div></div><div class="sh-body">${body}
+  const s = sheet(`<div class="sh-head"><div class="sh-title">Настроить волну</div><button class="btn sm" id="wsReset">Сбросить</button></div><div class="sh-body">${body}
     ${state.accounts.sc ? `<button class="row-toggle" id="wsMix"><span class="rt-t"><b>SoundCloud в волне</b><span>Подмешивать треки из ваших лайков SoundCloud</span></span><span class="tgl${state.wave.mix ? ' on' : ''}"></span></button>` : ''}
     <button class="row-toggle" id="wsTod"><span class="rt-t"><b>По времени суток</b><span>Утром бодрее, ночью спокойнее, если настроение «Любое»</span></span><span class="tgl${state.prefs.timeOfDay !== false ? ' on' : ''}"></span></button></div>`,
   { onClose: () => { if (changed) { renderWave(); applyWaveSettings(); } } });
   let changed = false;
+  $('#wsReset', s.el).onclick = () => {
+    Object.assign(state.wave, WAVE_DEFAULTS); changed = true; haptic('medium');
+    $$('.chips[data-k]', s.el).forEach(row => $$('.chip', row).forEach(c => c.classList.toggle('active', c.dataset.v === WAVE_DEFAULTS[row.dataset.k])));
+  };
   $$('.chips[data-k]', s.el).forEach(row => row.onclick = e => {
     const b = e.target.closest('.chip'); if (!b) return;
     state.wave[row.dataset.k] = b.dataset.v; changed = true; haptic();
