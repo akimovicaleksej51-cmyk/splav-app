@@ -54,6 +54,9 @@ jobs:
             build | tail -n 40
           test -d build/Build/Products/Release-iphoneos/App.app
           mkdir -p Payload && cp -R build/Build/Products/Release-iphoneos/App.app Payload/
+          # в служебном названии Apple принимает только латиницу, а на экране iPhone показываем «Сплав»
+          for l in ru en Base; do mkdir -p "Payload/App.app/$l.lproj"; printf '"CFBundleDisplayName" = "Сплав";\n"CFBundleName" = "Сплав";\n' > "Payload/App.app/$l.lproj/InfoPlist.strings"; done
+          /usr/libexec/PlistBuddy -c "Add :CFBundleLocalizations array" -c "Add :CFBundleLocalizations:0 string ru" -c "Add :CFBundleLocalizations:1 string en" Payload/App.app/Info.plist || true
           zip -qry Splav.ipa Payload
           ls -la Splav.ipa
 
