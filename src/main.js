@@ -1322,9 +1322,24 @@ handle('presence', async (d) => {
 
 
 // ---------- волна по треку и по артисту ----------
+// жанровые станции Яндекса; если жанра там нет — берём SoundCloud и Audius по тегу
+const YA_GENRE = { rap: 'rap', phonk: 'phonk', pop: 'pop', indie: 'indie', rock: 'rock', electronic: 'electronics', techno: 'techno', house: 'house', lofi: 'lofi', ambient: 'ambient', jazz: 'jazz', classical: 'classicalmusic', rnb: 'rnb' };
+async function genreTracks(st, lastYaId, ws) {
+  let out = [];
+  if (config.yaToken && YA_GENRE[st.id]) { try { out = await yaWaveTracks(lastYaId, `genre:${YA_GENRE[st.id]}`); } catch {} }
+  if (out.length) return out;
+  const [scL, auL] = await Promise.all([
+    scWaveTracks([], ws, 8, [st.id]).catch(() => []),
+    auWave(ws, [st.id], 4).catch(() => []),
+  ]);
+  for (let i = 0; out.length < 12 && (scL.length || auL.length); i++) out.push((i % 3 === 2 ? auL : scL).shift() || scL.shift() || auL.shift());
+  return out.filter(Boolean);
+}
+
 async function stationTracks(st, lastYaId, ws) {
   const loose = { ...ws, language: 'any', moodEnergy: 'all' };      // у станции свой характер, языковые фильтры не мешают
   const fits = t => t && t.available !== false && !recentSc.ids.includes(t.rawId);
+  if (st.type === 'genre') return (await genreTracks(st, lastYaId, ws)).filter(fits);
   let out = [];
   try {
     if (st.source === 'ya' && config.yaToken) {

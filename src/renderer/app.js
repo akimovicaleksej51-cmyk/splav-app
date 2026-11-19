@@ -1822,9 +1822,10 @@ function renderTogether() {
     el.innerHTML = `<div class="fc-title">Ваша комната</div>
       <div class="tg-code">${room.code.split('').map(d => `<span>${d}</span>`).join('')}</div>
       <div class="fc-text">Продиктуйте код другу: он введёт его у себя на этой же странице.</div>
-      <div class="fc-row"><button class="btn primary" id="tgCopy">Скопировать код</button><button class="btn danger" id="tgEnd">Завершить</button></div>
+      <div class="fc-row"><button class="btn primary" id="tgLink">Скопировать ссылку</button><button class="btn" id="tgCopy">Код</button><button class="btn danger" id="tgEnd">Завершить</button></div>
       <div class="rp-sub">Слушают</div><div class="rp-members">${members}</div>${warn}`;
     $('#tgCopy', el).addEventListener('click', () => navigator.clipboard.writeText(room.code).then(() => toast('Код скопирован')));
+    $('#tgLink', el).addEventListener('click', () => navigator.clipboard.writeText(`${state.keyValues.server.replace(/\/+$/, '')}/api/join?c=${room.code}`).then(() => toast('Ссылка скопирована: друг нажмёт её, и Сплав откроется в комнате')));
     $('#tgEnd', el).addEventListener('click', () => { roomLeave(false); toast('Комната завершена'); });
     return;
   }
@@ -1871,9 +1872,9 @@ function bindCodeCells(box) {
 }
 
 /* ---------- друзья ---------- */
-const social = { me: null, read: {}, ver: null, since: 0, friends: [], incoming: [], outgoing: [], inbox: [], sel: null, chat: [], loaded: false, lastSync: 0, busy: false };
+const social = { reactions: {}, me: null, read: {}, ver: null, since: 0, friends: [], incoming: [], outgoing: [], inbox: [], sel: null, chat: [], loaded: false, lastSync: 0, busy: false };
 const fname = id => { const f = social.friends.find(x => x.id === id); return f ? f.name : ''; };
-const unreadOf = id => social.inbox.filter(m => m.f === id && m.ts > (social.read[id] || 0)).length;
+const unreadOf = id => social.inbox.filter(m => m.f === id && m.type !== 'react' && m.ts > (social.read[id] || 0)).length;
 function updateFrCount() {
   const n = social.friends.reduce((a, f) => a + unreadOf(f.id), 0) + social.incoming.length;
   const el = $('#frCount'); el.textContent = n > 99 ? '99+' : n; el.classList.toggle('hidden', !n);
@@ -1896,15 +1897,22 @@ async function socialSync() {
     const first = !social.loaded;
     const fresh = (d.inbox || []).filter(m => !social.inbox.some(x => x.id === m.id));
     if (!first) {
-      for (const m of fresh) if (!(frVisible() && social.sel === m.f && document.hasFocus())) notify(`Трек от @${m.fn}`, `«${m.t.title}», ${m.t.artist}`, () => { showPage('friends'); openChat(m.f); });
+      for (const m of fresh) {
+        if (frVisible() && social.sel === m.f && document.hasFocus()) continue;
+        if (m.type === 'react') notify(`@${m.fn} ${m.e}`, `на «${m.title || 'трек'}»`, () => { showPage('friends'); openChat(m.f); });
+        else notify(`Трек от @${m.fn}`, `«${m.t.title}», ${m.t.artist}`, () => { showPage('friends'); openChat(m.f); });
+      }
       for (const r of d.incoming) if (!social.incoming.some(x => x.id === r.id)) notify('Заявка в друзья', `@${r.name} хочет добавить вас в друзья`, () => showPage('friends'));
     }
     Object.assign(social, { ver: d.ver, me: { ...social.me, name: d.me.name }, friends: d.friends, incoming: d.incoming, outgoing: d.outgoing, loaded: true });
     social.inbox = [...fresh, ...social.inbox].slice(0, 300);
     social.since = Math.max(social.since, ...social.inbox.map(m => m.ts), 0);
     if (social.sel && !social.friends.some(f => f.id === social.sel)) social.sel = null;
-    const forChat = fresh.filter(m => m.f === social.sel);
+    const forChat = fresh.filter(m => m.f === social.sel && m.type !== 'react');
     if (forChat.length) { social.chat = [...social.chat, ...forChat.reverse()]; markRead(social.sel); }
+    const rxNew = fresh.filter(m => m.type === 'react' && m.f === social.sel);
+    for (const r of rxNew) (social.reactions[r.msg] ||= {})[r.f] = r.e;
+    if (rxNew.length && !forChat.length) renderChat();
     renderFriends(); if (forChat.length || !social.sel) renderChat();
   } catch (e) {
     if (/создайте его заново/.test(e.message)) { social.me = null; renderFriends(); renderChat(); toast(e.message); }
@@ -1966,7 +1974,7 @@ function renderFriends() {
 
 async function openChat(id) {
   social.sel = id; social.chat = []; renderFriends(); renderChat(true);
-  try { const d = await API.social({ action: 'chat', id }); if (social.sel !== id) return; social.chat = (d.messages || []).slice().reverse(); }
+  try { const d = await API.social({ action: 'chat', id }); if (social.sel !== id) return; social.chat = (d.messages || []).slice().reverse(); social.reactions = d.reactions || {}; }
   catch (e) { toast(e.message); }
   markRead(id); renderFriends(); renderChat();
 }
@@ -1979,7 +1987,9 @@ function renderChat(loading) {
   const name = fname(social.sel);
   const msgs = social.chat.map(m => {
     const mine = m.f === social.me.id, t = m.t;
-    return `<div class="msg${mine ? ' mine' : ''}" data-id="${esc(m.id)}"><div class="msg-card"><div class="r-cover" style="background-image:${esc(cssUrl(t.cover))}"></div><div class="msg-main"><div class="r-title">${esc(t.title)}</div><div class="r-artist">${esc(t.artist)}</div></div><span class="badge">${SOURCE_NAME[t.source] || ''}</span></div><div class="msg-time">${mine ? 'вы, ' : ''}${timeAgo(m.ts)}</div></div>`;
+    const rmap = social.reactions[m.id] || {}, rx = Object.values(rmap), myR = rmap[social.me.id];
+    const rxHtml = rx.length ? `<div class="msg-rx">${[...new Set(rx)].map(e => `<span class="${e === myR ? 'me' : ''}">${e}${rx.filter(x => x === e).length > 1 ? ' ' + rx.filter(x => x === e).length : ''}</span>`).join('')}</div>` : '';
+    return `<div class="msg${mine ? ' mine' : ''}" data-id="${esc(m.id)}"><div class="msg-card"><div class="r-cover" style="background-image:${esc(cssUrl(t.cover))}"></div><div class="msg-main"><div class="r-title">${esc(t.title)}</div><div class="r-artist">${esc(t.artist)}</div></div><span class="badge">${SOURCE_NAME[t.source] || ''}</span></div>${rxHtml}<div class="msg-time">${mine ? 'вы, ' : ''}${timeAgo(m.ts)}<span class="msg-rpick">${['🔥', '❤️', '😂', '😮', '👎'].map(e => `<button data-e="${e}" class="${e === myR ? 'on' : ''}" title="Реакция">${e}</button>`).join('')}</span></div></div>`;
   }).join('');
   el.innerHTML = `<div class="chat-head">${ava(name)}<div class="chat-name">@${esc(name)}</div><button class="btn primary" id="chSendNow"${state.current ? '' : ' disabled'}>Отправить то, что играет</button><button class="ibtn" id="chMore" title="Ещё"><svg viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="18.5" cy="12" r="1.4" fill="currentColor"/></svg></button></div>
     <div class="chat-body" id="chBody">${loading ? '<div class="fc-empty">Загружаем…</div>' : msgs || `<div class="fc-empty">Пока пусто. Отправьте @${esc(name)} первый трек.</div>`}</div>`;
@@ -1993,6 +2003,12 @@ function renderChat(loading) {
     $('[data-x]', m).addEventListener('click', async () => { closeCtx(); try { await API.social({ action: 'remove', id: social.sel }); social.sel = null; social.ver = null; await socialSync(); renderChat(); toast(`@${name} больше не в друзьях`); } catch (err) { toast(err.message); } });
   });
   $$('.msg', el).forEach(row => row.querySelector('.msg-card').addEventListener('click', () => playShared(social.chat.find(m => m.id === row.dataset.id).t)));
+  $$('.msg-rpick button', el).forEach(b => b.addEventListener('click', async e => {
+    e.stopPropagation();
+    const id = b.closest('.msg').dataset.id, cur = (social.reactions[id] || {})[social.me.id];
+    const val = cur === b.dataset.e ? '' : b.dataset.e;
+    try { const r = await API.social({ action: 'react', id: social.sel, msg: id, e: val }); social.reactions[id] = r.reactions; renderChat(); } catch (err) { toast(err.message); }
+  }));
 }
 async function playShared(t) {
   toast(`Ищем «${t.title}»…`);

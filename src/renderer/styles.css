@@ -689,3 +689,13 @@ body.lite .queue, body.lite .ctx, body.lite .sleep-pop, body.lite .modal { backg
 
 .toast.clickable { pointer-events: auto; cursor: pointer; border-color: rgba(var(--blood-rgb), .5); }
 .toast.clickable:hover { background: #1d1d23; }
+
+/* реакции в переписке */
+.msg-rx { display: flex; gap: 4px; margin: 5px 6px 0; }
+.msg.mine .msg-rx { justify-content: flex-end; }
+.msg-rx span { padding: 1px 7px; border-radius: 999px; background: var(--ash); border: 1px solid var(--line); font-size: 13px; font-weight: 700; }
+.msg-rx span.me { border-color: rgba(var(--blood-rgb), .6); background: rgba(var(--blood-rgb), .2); }
+.msg-rpick { margin-left: 8px; opacity: 0; transition: opacity .2s; }
+.msg:hover .msg-rpick { opacity: 1; }
+.msg-rpick button { font-size: 14px; padding: 0 2px; filter: grayscale(.6); transition: transform .15s, filter .15s; }
+.msg-rpick button:hover, .msg-rpick button.on { filter: none; transform: scale(1.2); }

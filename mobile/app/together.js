@@ -155,9 +155,9 @@ export function roomLeave(silent) {
 }
 
 /* ---------- друзья ---------- */
-const social = { me: null, read: {}, ver: null, since: 0, friends: [], incoming: [], outgoing: [], inbox: [], loaded: false, lastSync: 0, busy: false, chatWith: null, chat: [], chatEl: null };
+const social = { reactions: {}, me: null, read: {}, ver: null, since: 0, friends: [], incoming: [], outgoing: [], inbox: [], loaded: false, lastSync: 0, busy: false, chatWith: null, chat: [], chatEl: null };
 const hasServer = () => !!(state.keyValues && state.keyValues.server);
-const unreadOf = id => social.inbox.filter(m => m.f === id && m.ts > (social.read[id] || 0)).length;
+const unreadOf = id => social.inbox.filter(m => m.f === id && m.type !== 'react' && m.ts > (social.read[id] || 0)).length;
 const fname = id => (social.friends.find(f => f.id === id) || {}).name || '';
 function updateCount() {
   const n = social.friends.reduce((a, f) => a + unreadOf(f.id), 0) + social.incoming.length;
@@ -181,14 +181,18 @@ async function socialSync() {
     const first = !social.loaded;
     const fresh = (d.inbox || []).filter(m => !social.inbox.some(x => x.id === m.id));
     if (!first) {
-      for (const m of fresh) if (social.chatWith !== m.f || document.hidden) notify(`Трек от @${m.fn}`, `«${m.t.title}», ${m.t.artist}`, goChat(m.f));
+      for (const m of fresh) {
+        if (m.type === 'react') { if (social.chatWith !== m.f || document.hidden) notify(`@${m.fn} ${m.e}`, `на «${m.title || 'трек'}»`, goChat(m.f)); continue; }
+        if (social.chatWith !== m.f || document.hidden) notify(`Трек от @${m.fn}`, `«${m.t.title}», ${m.t.artist}`, goChat(m.f));
+      }
       for (const r of d.incoming) if (!social.incoming.some(x => x.id === r.id)) notify('Заявка в друзья', `@${r.name} хочет добавить вас в друзья`, async () => { const { showTab } = await import('./lib.js'); showTab('together'); });
     }
     Object.assign(social, { ver: d.ver, me: { ...social.me, name: d.me.name }, friends: d.friends, incoming: d.incoming, outgoing: d.outgoing, loaded: true });
     social.inbox = [...fresh, ...social.inbox].slice(0, 300);
     social.since = Math.max(social.since, ...social.inbox.map(m => m.ts), 0);
-    const forChat = fresh.filter(m => m.f === social.chatWith);
+    const forChat = fresh.filter(m => m.f === social.chatWith && m.type !== 'react');
     if (forChat.length) { social.chat.push(...forChat.reverse()); markRead(social.chatWith); renderChat(); }
+    for (const r of fresh.filter(m => m.type === 'react' && m.f === social.chatWith)) { (social.reactions[r.msg] ||= {})[r.f] = r.e; renderChat(); }
     if (state.tab === 'together') renderTogether();
   } catch (e) {
     if (/создайте его заново/.test(e.message)) { social.me = null; toast(e.message); if (state.tab === 'together') renderTogether(); }
@@ -215,9 +219,16 @@ function renderRoomCard(box) {
   if (room.role === 'host') {
     box.innerHTML = `<div class="cb-title">Ваша комната</div><div class="code-big">${room.code.split('').map(d => `<span>${d}</span>`).join('')}</div>
       <div class="cb-text">Продиктуйте код другу: он введёт его у себя в Сплаве, на вкладке «Комната».</div>
-      <div class="btn-row" style="padding:0"><button class="btn primary" id="rCopy">${ico('copy')}Скопировать</button><button class="btn" id="rEnd">Завершить</button></div>
+      <button class="btn primary wide" id="rInvite">${ico('send')}Пригласить ссылкой</button>
+      <div class="btn-row" style="padding:0;margin-top:10px"><button class="btn" id="rCopy">${ico('copy')}Код</button><button class="btn" id="rEnd">Завершить</button></div>
       <div class="sub-label">Слушают</div><div class="members">${members}</div>${warn}`;
     $('#rCopy', box).onclick = () => navigator.clipboard.writeText(room.code).then(() => { haptic(); toast('Код скопирован'); });
+    $('#rInvite', box).onclick = async () => {
+      haptic();
+      const url = `${state.keyValues.server.replace(/\/+$/, '')}/api/join?c=${room.code}`;
+      try { await navigator.share({ title: 'Слушаем вместе в Сплаве', text: `Заходи в мою комнату в Сплаве, код ${room.code}`, url }); }
+      catch (e) { if (e && e.name === 'AbortError') return; navigator.clipboard.writeText(url).then(() => toast('Ссылка скопирована: отправьте её другу')); }
+    };
     $('#rEnd', box).onclick = () => { roomLeave(false); toast('Комната завершена'); };
     return;
   }
@@ -297,7 +308,7 @@ function openChat(id) {
       <div class="chat-send"><button class="btn primary wide" id="chSend"${state.current ? '' : ' disabled'}>${ico('send')}Отправить то, что играет</button></div>`;
     $('#chSend', pg).onclick = () => state.current && sendTrack(id, state.current);
     $('#chMore', pg).onclick = () => actions('', [['trash', `Удалить @${name} из друзей`, async () => { try { await API.social({ action: 'remove', id }); pop(); social.ver = null; socialSync(); toast(`@${name} больше не в друзьях`); } catch (e) { toast(e.message); } }, { danger: true }]]);
-    try { const d = await API.social({ action: 'chat', id }); if (social.chatWith !== id) return; social.chat = (d.messages || []).slice().reverse(); } catch (e) { toast(e.message); }
+    try { const d = await API.social({ action: 'chat', id }); if (social.chatWith !== id) return; social.chat = (d.messages || []).slice().reverse(); social.reactions = d.reactions || {}; } catch (e) { toast(e.message); }
     markRead(id); renderChat();
   });
   // при уходе со страницы переписки
@@ -310,13 +321,32 @@ function renderChat() {
   const name = fname(social.chatWith);
   body.innerHTML = social.chat.length ? social.chat.map((m, i) => {
     const mine = m.f === social.me.id, t = m.t;
-    return `<div class="msg${mine ? ' mine' : ''}"><div class="msg-card" data-i="${i}"><div class="cv" style="background-image:${esc(cssUrl(t.cover))}"></div><div class="tm"><div class="tt">${esc(t.title)}</div><div class="ta"><span class="src">${({ ya: 'Я', sc: 'SC', zv: 'ЗВУК', au: 'AU', ja: 'JA' })[t.source] || ''}</span><span>${esc(t.artist)}</span></div></div></div><div class="msg-time">${mine ? 'вы, ' : ''}${timeAgo(m.ts)}</div></div>`;
+    const rx = Object.entries(social.reactions[m.id] || {});
+    const mineR = (social.reactions[m.id] || {})[social.me.id];
+    const rxHtml = rx.length ? `<div class="msg-rx">${[...new Set(rx.map(([, e]) => e))].map(e => `<span class="${e === mineR ? 'me' : ''}">${e}${rx.filter(([, x]) => x === e).length > 1 ? ' ' + rx.filter(([, x]) => x === e).length : ''}</span>`).join('')}</div>` : '';
+    return `<div class="msg${mine ? ' mine' : ''}"><div class="msg-card" data-i="${i}"><div class="cv" style="background-image:${esc(cssUrl(t.cover))}"></div><div class="tm"><div class="tt">${esc(t.title)}</div><div class="ta"><span class="src">${({ ya: 'Я', sc: 'SC', zv: 'ЗВУК', au: 'AU', ja: 'JA' })[t.source] || ''}</span><span>${esc(t.artist)}</span></div></div></div>${rxHtml}<div class="msg-time">${mine ? 'вы, ' : ''}${timeAgo(m.ts)}<button class="msg-react" data-r="${i}" aria-label="Реакция">${mineR ? 'изменить реакцию' : 'реакция'}</button></div></div>`;
   }).join('') : `<div class="empty">Пока пусто. Отправьте @${esc(name)} первый трек: «Отправить другу» есть в меню любого трека и в плеере.</div>`;
   $$('.msg-card', body).forEach(c => c.onclick = () => playShared(social.chat[+c.dataset.i].t));
+  $$('.msg-react', body).forEach(b => b.onclick = () => reactTo(social.chat[+b.dataset.r]));
   const sb = $('#chSend', pg); if (sb) sb.disabled = !state.current;
   const page = pg.closest('.page'); if (page) setTimeout(() => page.scrollTo({ top: page.scrollHeight, behavior: 'smooth' }), 30);
 }
 document.addEventListener('now-changed', () => { if (social.chatEl) { const sb = $('#chSend', social.chatEl); if (sb) sb.disabled = !state.current; } });
+const REACTIONS = ['🔥', '❤️', '😂', '😮', '👎'];
+function reactTo(m) {
+  const mine = (social.reactions[m.id] || {})[social.me.id];
+  const s = sheet(`<div class="sh-head"><div class="sh-t"><b>Реакция</b><span>${esc(m.t.title)}</span></div></div><div class="rx-pick">${REACTIONS.map(e => `<button data-e="${e}" class="${e === mine ? 'on' : ''}">${e}</button>`).join('')}</div>${mine ? '<button class="act" id="rxOff">Убрать реакцию</button>' : ''}`);
+  const send = async e => {
+    s.close(); haptic('medium');
+    const prev = { ...(social.reactions[m.id] || {}) };
+    social.reactions[m.id] = { ...prev }; if (e) social.reactions[m.id][social.me.id] = e; else delete social.reactions[m.id][social.me.id];
+    renderChat();
+    try { const r = await API.social({ action: 'react', id: social.chatWith, msg: m.id, e }); social.reactions[m.id] = r.reactions; renderChat(); }
+    catch (err) { social.reactions[m.id] = prev; renderChat(); toast(err.message); }
+  };
+  $$('[data-e]', s.el).forEach(b => b.onclick = () => send(b.dataset.e === mine ? '' : b.dataset.e));
+  const off = $('#rxOff', s.el); if (off) off.onclick = () => send('');
+}
 async function playShared(t) {
   haptic(); toast(`Ищем «${t.title}»…`);
   const mine = await resolveTrack(t);

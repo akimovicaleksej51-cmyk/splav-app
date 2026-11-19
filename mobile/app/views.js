@@ -50,6 +50,8 @@ export function renderWave() {
     ${needOnb ? `<div class="onb"><div class="onb-title">Что вам нравится?</div><div class="onb-text">Отметьте пару жанров, и волна начнётся с них. Без входа звучит музыка из SoundCloud, Audius и Jamendo.</div><div class="chips wrap" id="obG">${GENRES.map(([k, n]) => `<button class="chip" data-g="${k}">${n}</button>`).join('')}</div><button class="btn primary wide" id="obGo">Слушать волну</button><button class="btn ghost wide" id="obLogin" style="margin-top:6px">У меня есть Яндекс или Звук</button></div>` : ''}
     <div class="sec-title">Настроение</div>
     <div class="chips" id="wvMood">${MOODS.map(([v, n]) => `<button class="chip${state.wave.moodEnergy === v ? ' active' : ''}" data-v="${v}">${n}</button>`).join('')}</div>
+    <div class="sec-title">Волна по жанру</div>
+    <div class="genre-grid" id="wvGenres">${GENRES.map(([k, n], i) => `<button class="genre${state.station && state.station.type === 'genre' && state.station.id === k ? ' on' : ''}" data-g="${k}" style="--h:${(i * 27) % 360}">${n}</button>`).join('')}</div>
     <div id="wvNextBox"></div>`;
   $('#wavePlay', el).onclick = () => { haptic(); if (state.mode === 'wave' && state.current) togglePlay(); else startWave(state.station); };
   $('#wvNext', el).onclick = async () => { haptic(); (await import('./player.js')).next(true); };
@@ -63,6 +65,12 @@ export function renderWave() {
     haptic(); state.wave.moodEnergy = b.dataset.v;
     $$('#wvMood .chip', el).forEach(c => c.classList.toggle('active', c === b));
     applyWaveSettings(); if (state.mode !== 'wave' || !state.current) startWave(state.station);
+  });
+  $$('#wvGenres .genre', el).forEach(b => b.onclick = () => {
+    haptic('medium');
+    const name = (GENRES.find(g => g[0] === b.dataset.g) || [])[1] || b.dataset.g;
+    $('#tab-wave').scrollTo({ top: 0, behavior: 'smooth' });
+    startWave({ type: 'genre', source: 'mix', id: b.dataset.g, label: `«${name}»` });
   });
   import('./main.js').then(m => m.renderUpdate($('#updWave'))).catch(() => {});
   const so = $('#stOff', el); if (so) so.onclick = () => { state.station = null; startWave(); };
@@ -151,9 +159,14 @@ function openWaveSettings() {
 }
 
 /* ================= ПОИСК ================= */
-const RECENT = 'splav.recent';
+const RECENT = 'splav.recent2';
+// недавние: { k: 'q', q } — запрос, { k: 'a', a } — артист, { k: 't', t } — трек
 const recent = () => { try { return JSON.parse(localStorage.getItem(RECENT) || '[]'); } catch { return []; } };
-const addRecent = q => { const r = [q, ...recent().filter(x => x.toLowerCase() !== q.toLowerCase())].slice(0, 12); localStorage.setItem(RECENT, JSON.stringify(r)); };
+const recentKey = r => r.k === 'q' ? 'q:' + r.q.toLowerCase() : r.k === 'a' ? 'a:' + r.a.source + r.a.id : 't:' + key(r.t);
+function addRecent(item) {
+  const k = recentKey(item);
+  localStorage.setItem(RECENT, JSON.stringify([item, ...recent().filter(x => recentKey(x) !== k)].slice(0, 16)));
+}
 const search = { q: '', res: null, token: 0, timer: null, built: false };
 function buildSearch() {
   const el = $('#tab-search');
@@ -175,17 +188,27 @@ async function runSearch() {
   try {
     const r = await API.search(q);
     if (token !== search.token) return;
-    search.res = r; addRecent(q); renderSearchRes();
+    search.res = r; addRecent({ k: 'q', q }); renderSearchRes();
   } catch (e) { if (token === search.token) $('#sRes').innerHTML = `<div class="empty">Не получилось найти: ${esc(e.message)}</div>`; }
 }
 function renderSearchRes() {
   const box = $('#sRes');
   if (!search.q || !search.res) {
     const r = recent();
-    box.innerHTML = r.length ? `<div class="sec-title">Вы искали<button id="rcClear">Очистить</button></div>${r.map(q => `<button class="recent-row" data-q="${esc(q)}">${ico('clock')}<span>${esc(q)}</span></button>`).join('')}`
-      : '<div class="empty"><b>Ищем везде сразу</b>Яндекс Музыка, Звук, SoundCloud, Audius и Jamendo в одном списке</div>';
+    if (!r.length) { box.innerHTML = '<div class="empty"><b>Ищем везде сразу</b>Яндекс Музыка, Звук, SoundCloud, Audius и Jamendo в одном списке</div>'; return; }
+    const arts = r.filter(x => x.k === 'a').slice(0, 10), trks = r.filter(x => x.k === 't').slice(0, 6), qs = r.filter(x => x.k === 'q').slice(0, 6);
+    box.innerHTML = `<div class="sec-title">Недавнее<button id="rcClear">Очистить</button></div>
+      ${arts.length ? `<div class="artist-row recent-artists">${arts.map((x, i) => `<div class="ar-item"><button class="ar-img" data-ra="${i}" style="background-image:${esc(cssUrl(x.a.cover))}"></button><button class="ar-play" data-rp="${i}" aria-label="Слушать ${esc(x.a.name)}">${ico('play')}</button><div class="ar-name">${esc(x.a.name)}</div></div>`).join('')}</div>` : ''}
+      ${trks.length ? '<div class="list" id="rcTracks"></div>' : ''}
+      ${qs.map(x => `<button class="recent-row" data-q="${esc(x.q)}">${ico('clock')}<span>${esc(x.q)}</span></button>`).join('')}`;
+    $$('[data-ra]', box).forEach(b => b.onclick = () => { const a = arts[+b.dataset.ra].a; openArtist(a.source, a.id, a.name); });
+    $$('[data-rp]', box).forEach(b => b.onclick = async () => {
+      const a = arts[+b.dataset.rp].a; haptic('medium'); toast(`Включаем ${a.name}…`);
+      try { const d = await API.artist(a.source, a.id); const list = d.popular || []; if (list.length) playQueue(list, 0, 'list', a.name); else toast('У артиста нет доступных треков'); } catch (e) { toast(e.message); }
+    });
+    if (trks.length) { const list = trks.map(x => x.t); renderList($('#rcTracks', box), list, { onPlay: i => playQueue(list, i, 'list', 'Недавнее'), onMore: t => trackMenu(t) }); }
     $$('.recent-row', box).forEach(b => b.onclick = () => { const inp = $('#sIn'); inp.value = b.dataset.q; search.q = b.dataset.q; $('#sClear').classList.remove('hidden'); runSearch(); });
-    const c = $('#rcClear', box); if (c) c.onclick = () => { localStorage.removeItem(RECENT); renderSearchRes(); };
+    $('#rcClear', box).onclick = () => { localStorage.removeItem(RECENT); renderSearchRes(); };
     return;
   }
   const { tracks = [], artists = [], locked = [] } = search.res;
@@ -198,8 +221,8 @@ function renderSearchRes() {
   html += tracks.length ? `<div class="sec-title">Треки</div><div class="list" id="sTracks"></div>` : (!best ? '<div class="empty">Ничего не нашлось. Попробуйте написать иначе</div>' : '');
   if (locked.length) html += `<div class="locked-card"><b>Ещё ${plural(locked.length, 'трек', 'трека', 'треков')} в Яндекс Музыке</b><p>Войдите в Яндекс с подпиской Плюс, чтобы слушать весь каталог.</p><button class="btn sm red" id="sLogin">Войти в Яндекс</button></div>`;
   box.innerHTML = html;
-  $$('[data-a]', box).forEach(b => b.onclick = () => { const a = artists[+b.dataset.a]; haptic(); openArtist(a.source, a.id, a.name); });
-  if (tracks.length) renderList($('#sTracks', box), tracks, { onPlay: i => playQueue(tracks, i, 'list', 'Поиск'), onMore: t => trackMenu(t) });
+  $$('[data-a]', box).forEach(b => b.onclick = () => { const a = artists[+b.dataset.a]; haptic(); addRecent({ k: 'a', a: { source: a.source, id: a.id, name: a.name, cover: a.cover } }); openArtist(a.source, a.id, a.name); });
+  if (tracks.length) renderList($('#sTracks', box), tracks, { onPlay: i => { addRecent({ k: 't', t: tracks[i] }); playQueue(tracks, i, 'list', 'Поиск'); }, onMore: t => trackMenu(t) });
   const l = $('#sLogin', box); if (l) l.onclick = () => login('ya');
 }
 
@@ -223,12 +246,15 @@ function renderLibrary() {
   const q = lib.text.toLowerCase();
   const list = q ? all.filter(t => (t.title + ' ' + t.artist).toLowerCase().includes(q)) : all;
   el.innerHTML = `<div class="head"><h1>Моя музыка</h1>${avatarBtn()}</div>
+    <button class="wr-card" id="wrCard"><span><b>Итоги ${MONTHS_IN[new Date().getMonth()]}</b><small id="wrMini">Ваши артисты и треки за месяц</small></span>${ico('chev')}</button>
     <div class="lib-tools"><div class="chips" id="libTabs">${tabs.map(([k, n]) => `<button class="chip${lib.f === k ? ' active' : ''}" data-f="${k}">${n}</button>`).join('')}</div></div>
     ${isPl ? '<div id="plBox"></div>' : `
       ${all.length ? `<div class="btn-row" style="margin-top:10px"><button class="btn primary" id="libPlay">${ico('play', 'fillsvg')}Слушать</button><button class="btn" id="libShuf">${ico('shuffle')}Вперемешку</button></div>
       <div class="lib-filter"><div class="search-field">${ico('search')}<input id="libQ" type="search" placeholder="Найти в моей музыке" value="${esc(lib.text)}" autocomplete="off" spellcheck="false"></div></div>` : ''}
       <div class="list" id="libList" style="margin-top:6px"></div>`}`;
   $$('#libTabs .chip', el).forEach(b => b.onclick = () => { lib.f = b.dataset.f; haptic(); renderLibrary(); });
+  $('#wrCard', el).onclick = () => openWrapped();
+  API.wrapped().then(w => { const m = $('#wrMini'); if (m && w.minutes) m.textContent = `${plural(w.minutes, 'минута', 'минуты', 'минут')} музыки${w.topArtists[0] ? ', чаще всего ' + w.topArtists[0].name : ''}`; }).catch(() => {});
   if (isPl) { renderPlaylists($('#plBox', el)); return; }
   const empty = state.guest ? '<b>Здесь будут ваши лайки</b>Нажмите на сердце в плеере, или войдите в Яндекс, Звук или SoundCloud в профиле' : '<b>Пока пусто</b>Лайкайте треки, и они появятся здесь';
   renderList($('#libList', el), list, { onPlay: i => playQueue(list, i, 'list', 'Моя музыка'), onMore: t => trackMenu(t), empty, noLiked: true });
@@ -293,6 +319,64 @@ async function pickPlaylist(t) {
       await API.playlistSave({ ...pl, tracks: [...(pl.tracks || []), t] }); toast(`Добавлено в «${pl.name}»`);
     }])];
   actions(`<div class="sh-head"><div class="sh-title">В плейлист</div></div>`, items);
+}
+
+/* ================= ИТОГИ МЕСЯЦА ================= */
+const MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+const MONTHS_IN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+function openWrapped() {
+  const now = new Date(); let y = now.getFullYear(), m = now.getMonth() + 1;
+  push('Итоги', (pg, page, setTitle) => {
+    const draw = async () => {
+      setTitle(`Итоги: ${MONTHS[m - 1]}`);
+      pg.innerHTML = `<div class="wr-head"><button class="icon-btn" id="wrPrev" aria-label="Прошлый месяц">${ico('back')}</button><div class="wr-month">${MONTHS[m - 1][0].toUpperCase() + MONTHS[m - 1].slice(1)} ${y}</div><button class="icon-btn" id="wrNext" aria-label="Следующий месяц" ${y === now.getFullYear() && m === now.getMonth() + 1 ? 'disabled style="opacity:.25"' : ''}>${ico('chev')}</button></div><div class="skeleton" style="height:180px;margin:0 16px"></div>`;
+      $('#wrPrev', pg).onclick = () => { m--; if (m < 1) { m = 12; y--; } draw(); };
+      $('#wrNext', pg).onclick = () => { if (y === now.getFullYear() && m === now.getMonth() + 1) return; m++; if (m > 12) { m = 1; y++; } draw(); };
+      let w; try { w = await API.wrapped(`${y}-${m}`); } catch (e) { pg.querySelector('.skeleton').outerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+      const body = !w.plays ? `<div class="empty"><b>В этом месяце пока тихо</b>Слушайте музыку, и здесь появятся ваши любимые артисты и треки</div>` : `
+        <div class="wr-hero"><div class="wr-big">${w.minutes.toLocaleString('ru-RU')}</div><div class="wr-cap">${plural(w.minutes, 'минута', 'минуты', 'минут').replace(/^[\d\s]+/, '')} музыки</div>
+          <div class="wr-stats"><span><b>${w.plays}</b>прослушиваний</span><span><b>${w.uniqueArtists}</b>артистов</span><span><b>${w.uniqueTracks}</b>треков</span></div></div>
+        <div class="sec-title">Артисты месяца</div>
+        <div class="wr-list">${w.topArtists.map((a, i) => `<div class="wr-row"><span class="wr-n">${i + 1}</span><div class="wr-cv round" style="background-image:${esc(cssUrl(a.cover))}"></div><div class="tm"><div class="tt">${esc(a.name)}</div><div class="ta"><span>${plural(a.plays, 'прослушивание', 'прослушивания', 'прослушиваний')}</span></div></div></div>`).join('')}</div>
+        <div class="sec-title">Треки месяца</div>
+        <div class="wr-list">${w.topTracks.map((t, i) => `<div class="wr-row"><span class="wr-n">${i + 1}</span><div class="wr-cv" style="background-image:${esc(cssUrl(t.cover))}"></div><div class="tm"><div class="tt">${esc(t.title)}</div><div class="ta"><span>${esc(t.artist)}, ${plural(t.plays, 'раз', 'раза', 'раз')}</span></div></div></div>`).join('')}</div>
+        <div style="padding:20px"><button class="btn primary wide" id="wrShare">${ico('send')}Поделиться в сторис</button></div>`;
+      pg.querySelector('.skeleton').outerHTML = body;
+      const sh = $('#wrShare', pg); if (sh) sh.onclick = () => shareWrapped(w);
+    };
+    draw();
+  });
+}
+// картинка 1080×1920 для сторис: рисуем сами, без внешних картинок, чтобы холст можно было сохранить
+async function shareWrapped(w) {
+  haptic('medium');
+  const c = document.createElement('canvas'); c.width = 1080; c.height = 1920;
+  const g = c.getContext('2d');
+  await document.fonts.ready.catch(() => {});
+  const bg = g.createLinearGradient(0, 0, 1080, 1920); bg.addColorStop(0, '#2a0610'); bg.addColorStop(.45, '#0e0e12'); bg.addColorStop(1, '#060608');
+  g.fillStyle = bg; g.fillRect(0, 0, 1080, 1920);
+  const glow = g.createRadialGradient(780, 520, 40, 780, 520, 620); glow.addColorStop(0, 'rgba(209,42,63,.75)'); glow.addColorStop(1, 'rgba(209,42,63,0)');
+  g.fillStyle = glow; g.fillRect(0, 0, 1080, 1300);
+  g.fillStyle = '#ecebee'; g.textBaseline = 'alphabetic';
+  g.font = '800 46px Unbounded'; g.fillText('СПЛАВ', 90, 170);
+  g.font = '700 46px Manrope'; g.fillStyle = 'rgba(236,235,238,.7)'; g.fillText(`Итоги: ${MONTHS[w.month - 1]} ${w.year}`, 90, 250);
+  g.fillStyle = '#ecebee'; g.font = '800 230px Unbounded'; g.fillText(w.minutes.toLocaleString('ru-RU'), 80, 640);
+  g.font = '700 56px Manrope'; g.fillStyle = 'rgba(236,235,238,.8)'; g.fillText(plural(w.minutes, 'минута', 'минуты', 'минут').replace(/^[\d\s]+/, '') + ' музыки', 92, 730);
+  const fit = (txt, max, font) => { g.font = font; let t = txt; while (g.measureText(t).width > max && t.length > 1) t = t.slice(0, -2); return t === txt ? t : t + '…'; };
+  let yy = 900;
+  g.fillStyle = '#d12a3f'; g.font = '800 40px Manrope'; g.fillText('АРТИСТЫ МЕСЯЦА', 92, yy); yy += 90;
+  w.topArtists.slice(0, 5).forEach((a, i) => { g.fillStyle = 'rgba(236,235,238,.45)'; g.font = '800 60px Unbounded'; g.fillText(String(i + 1), 92, yy); g.fillStyle = '#ecebee'; g.fillText(fit(a.name, 820, '800 60px Unbounded'), 170, yy); yy += 92; });
+  yy += 40; g.fillStyle = '#d12a3f'; g.font = '800 40px Manrope'; g.fillText('ТРЕК МЕСЯЦА', 92, yy); yy += 80;
+  const tt = w.topTracks[0]; if (tt) { g.fillStyle = '#ecebee'; g.fillText(fit(tt.title, 900, '800 58px Manrope'), 92, yy); yy += 66; g.fillStyle = 'rgba(236,235,238,.6)'; g.fillText(fit(tt.artist, 900, '600 46px Manrope'), 92, yy); }
+  g.fillStyle = 'rgba(236,235,238,.4)'; g.font = '700 38px Manrope'; g.fillText(`${w.plays} прослушиваний, ${w.uniqueArtists} артистов`, 92, 1820);
+  const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+  const file = new File([blob], `splav-${w.year}-${w.month}.png`, { type: 'image/png' });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Мои итоги в Сплаве' }); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  // запасной путь: показать картинку — её можно сохранить долгим нажатием
+  const url = URL.createObjectURL(blob);
+  sheet(`<div class="sh-head"><div class="sh-title">Картинка для сторис</div></div><div class="sh-body sh-pad"><img src="${url}" style="width:100%;border-radius:16px;-webkit-touch-callout:default" alt="Итоги месяца"><div class="note" style="padding:12px 0">Зажмите картинку и выберите «Сохранить в Фото»</div></div>`, { full: true });
 }
 
 /* ================= МЕНЮ ТРЕКА ================= */
