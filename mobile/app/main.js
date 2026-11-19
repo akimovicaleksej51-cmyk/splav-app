@@ -3,6 +3,7 @@ import { startCore, override, Native, isNative } from '../core/entry.js';
 import { App } from '@capacitor/app';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { SplashScreen } from '@capacitor/splash-screen';
+import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import keys from '../../src/keys.json';
 import pkg from '../package.json';
 import { $, $$, ico, toast, esc, state, showTab, haptic } from './lib.js';
@@ -36,30 +37,57 @@ override('appVersion', () => pkg.version);
 override('download', () => { throw new Error('Скачивание на iPhone появится в следующей версии'); });
 override('downloads', () => []);
 
-/* ---------- обновления через SideStore ---------- */
+/* ---------- обновления ---------- */
+// 1) интерфейс и логика (почти все изменения) обновляются сами: скачиваем в фоне, включаем при следующем запуске;
+// 2) нативная часть — через SideStore, об этом показываем полосу.
 const SOURCE_URL = keys.iosSource || '';
+const WEB_URL = keys.iosWeb || '';
 const cmpVer = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0); return 0; };
-let upd = null;
-export async function checkUpdates(manual) {
-  if (!SOURCE_URL) { if (manual) toast('Источник обновлений не настроен'); return; }
+let upd = null, nativeVer = pkg.nativeVersion || pkg.version;
+async function builtin() { if (!isNative) return nativeVer; try { return (await CapacitorUpdater.getBuiltinVersion()).version || nativeVer; } catch { return nativeVer; } }
+const fresh = u => u + (u.includes('?') ? '&' : '?') + 't=' + Date.now();
+
+// уже скачанное обновление новее текущего — включаем сразу при запуске или когда музыка не играет
+async function applyDownloaded() {
+  if (!isNative) return false;
   try {
-    const r = await fetch(SOURCE_URL + (SOURCE_URL.includes('?') ? '&' : '?') + 't=' + Date.now());
-    const src = await r.json();
+    const { bundles } = await CapacitorUpdater.list();
+    const ready = (bundles || []).filter(b => b.status === 'success' && b.version && cmpVer(b.version, pkg.version) > 0).sort((a, b) => cmpVer(b.version, a.version))[0];
+    if (!ready) return false;
+    localStorage.setItem('splav.updatedTo', ready.version);
+    await CapacitorUpdater.set({ id: ready.id });
+    return true;
+  } catch { return false; }
+}
+async function checkWeb(manual) {
+  if (!isNative || !WEB_URL) return false;
+  try {
+    const m = await (await fetch(fresh(WEB_URL))).json();
+    if (!m.version || cmpVer(m.version, pkg.version) <= 0) return false;
+    if (m.minNative && cmpVer(await builtin(), m.minNative) < 0) return false;   // нужна новая нативная часть — это через SideStore
+    const { bundles } = await CapacitorUpdater.list();
+    if (!(bundles || []).some(b => b.version === m.version && b.status === 'success')) await CapacitorUpdater.download({ url: m.url, version: m.version });
+    if (manual) toast(`Скачана версия ${m.version}. Применяем…`);
+    if (manual || !document.querySelector('body.playing')) await applyDownloaded();
+    return true;
+  } catch { return false; }
+}
+export async function checkUpdates(manual) {
+  if (await checkWeb(manual)) return;
+  if (!SOURCE_URL) { if (manual) toast('У вас последняя версия'); return; }
+  try {
+    const src = await (await fetch(fresh(SOURCE_URL))).json();
     const app = (src.apps || [])[0] || {};
     const v = (app.versions && app.versions[0]) || app;
-    if (v.version && cmpVer(v.version, pkg.version) > 0) { upd = { version: v.version, notes: v.localizedDescription || '' }; renderUpdateEverywhere(); if (manual) toast('Доступна версия ' + v.version); }
+    if (v.version && cmpVer(v.version, await builtin()) > 0) { upd = { version: v.version }; renderUpdateEverywhere(); if (manual) toast('Нужно обновить Сплав в SideStore'); }
     else if (manual) toast('У вас последняя версия');
   } catch { if (manual) toast('Не удалось проверить обновления'); }
 }
 export function renderUpdate(box) {
   if (!box) return;
-  box.innerHTML = upd ? `<div class="upd"><span>Доступна версия ${esc(upd.version)}</span><button class="btn sm primary" data-upd>Обновить</button></div>` : '';
+  box.innerHTML = upd ? `<div class="upd"><span>Версия ${esc(upd.version)} — обновите в SideStore</span><button class="btn sm primary" data-upd>Открыть</button></div>` : '';
 }
-function renderUpdateEverywhere() {
-  const bar = $('#updWave');
-  if (bar) renderUpdate(bar);
-  $$('[data-upd]').forEach(b => b.onclick = openSideStore);
-}
+function renderUpdateEverywhere() { const bar = $('#updWave'); if (bar) renderUpdate(bar); }
 async function openSideStore() {
   haptic();
   const url = 'sidestore://source?url=' + encodeURIComponent(SOURCE_URL);
@@ -67,6 +95,7 @@ async function openSideStore() {
   toast('Откройте SideStore и нажмите «Обновить» рядом со Сплавом');
 }
 document.addEventListener('click', e => { if (e.target.closest('[data-upd]')) openSideStore(); });
+export const versionLabel = async () => { const n = await builtin(); return n === pkg.version ? pkg.version : `${pkg.version} (основа ${n})`; };
 
 /* ---------- запуск ---------- */
 $$('.tb-ico').forEach(s => s.innerHTML = ico(s.dataset.ico));
@@ -74,6 +103,10 @@ $$('.tb').forEach(b => b.onclick = () => { haptic(); showTab(b.dataset.tab); });
 
 (async function init() {
   if (isNative) {
+    CapacitorUpdater.notifyAppReady().catch(() => {});
+    if (await applyDownloaded()) return;   // перезапуск в новую версию
+    const was = localStorage.getItem('splav.updatedTo');
+    if (was && was === pkg.version) { localStorage.removeItem('splav.updatedTo'); setTimeout(() => toast(`Сплав обновился до версии ${pkg.version}`), 1500); }
     StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
     App.addListener('appUrlOpen', ({ url }) => { const m = /^splavapp:\/\/(?:room|join)\/(\d{6})/.exec(url || ''); if (m) { showTab('together'); roomJoin(m[1]); } });
   }
@@ -83,10 +116,14 @@ $$('.tb').forEach(b => b.onclick = () => { haptic(); showTab(b.dataset.tab); });
   if (isNative) SplashScreen.hide().catch(() => {});
   loadLikes();
   socialInit();
-  setTimeout(() => checkUpdates(false), 4000);
-  // при возвращении в приложение — проверить обновления не чаще раза в 6 часов
+  setTimeout(() => checkUpdates(false), 3000);
+  // при возвращении в приложение: если музыка не играет — включаем скачанное, и раз в час проверяем новое
   let lastChk = Date.now();
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - lastChk > 6 * 3600e3) { lastChk = Date.now(); checkUpdates(false); } });
+  document.addEventListener('visibilitychange', async () => {
+    if (document.hidden) return;
+    if (!document.body.classList.contains('playing') && await applyDownloaded()) return;
+    if (Date.now() - lastChk > 3600e3) { lastChk = Date.now(); checkUpdates(false); }
+  });
 })();
 
 // для автоматических проверок интерфейса

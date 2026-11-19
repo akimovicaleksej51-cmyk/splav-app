@@ -1,6 +1,6 @@
 {
   "name": "splav-mobile",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "scripts": {
     "build": "node build.mjs",
@@ -14,7 +14,8 @@
     "@capacitor/local-notifications": "^8.3.1",
     "@capacitor/preferences": "^8.0.1",
     "@capacitor/splash-screen": "^8.0.0",
-    "@capacitor/status-bar": "^8.0.0"
+    "@capacitor/status-bar": "^8.0.0",
+    "@capgo/capacitor-updater": "^8.54.2"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.0.0",
@@ -23,5 +24,6 @@
     "js-sha256": "^0.11.0",
     "path-browserify": "^1.0.1"
   },
-  "releaseNotes": "Новая «Моя волна» с артистом, трек вперёд и назад с экрана блокировки, вход в SoundCloud, комната без задержки, уведомления о треках от друзей"
+  "releaseNotes": "Сплав теперь обновляется сам, без SideStore",
+  "nativeVersion": "1.0.4"
 }

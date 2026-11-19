@@ -394,7 +394,7 @@ export function openProfile() {
   $$('[data-in]', el).forEach(b => b.onclick = async () => { b.disabled = true; b.textContent = 'Входим…'; const ok = await login(b.dataset.in); if (profileSheet) { profileSheet.close(); if (ok) openProfile(); } });
   $$('[data-out]', el).forEach(b => b.onclick = () => actions('', [['logout', 'Выйти из ' + SERVICES.find(s => s[0] === b.dataset.out)[1], async () => { await API.logout(b.dataset.out); await refreshState(); await loadLikes(); rerenderAll(); profileSheet && profileSheet.close(); openProfile(); }, { danger: true }]]));
   $('#yaTok', el).onclick = async () => { const t = await prompt('Токен Яндекс Музыки', { placeholder: 'y0_…', ok: 'Подключить' }); if (!t) return; try { await API.setYaToken(t); await refreshState(); await loadLikes(); rerenderAll(); toast('Яндекс подключён'); profileSheet && profileSheet.close(); } catch (e) { toast('Токен не подошёл: ' + e.message); } };
-  API.appVersion().then(v => { const l = $('#verLbl', el); if (l) l.textContent = 'Версия ' + v; }).catch(() => {});
+  import('./main.js').then(m => m.versionLabel()).then(v => { const l = $('#verLbl', el); if (l) l.textContent = 'Версия ' + v + '. Обновляется сама'; }).catch(() => {});
   $('#updChk', el).onclick = async () => { const { checkUpdates } = await import('./main.js'); checkUpdates(true); };
   import('./main.js').then(m => m.renderUpdate($('#updBox', el)));
 }

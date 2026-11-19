@@ -10,7 +10,21 @@
     "scrollEnabled": true
   },
   "plugins": {
-    "CapacitorHttp": { "enabled": true },
-    "SplashScreen": { "launchAutoHide": false, "backgroundColor": "#060608", "showSpinner": false }
+    "CapacitorHttp": {
+      "enabled": true
+    },
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "backgroundColor": "#060608",
+      "showSpinner": false
+    },
+    "CapacitorUpdater": {
+      "autoUpdate": false,
+      "statsUrl": "",
+      "channelUrl": "",
+      "updateUrl": "",
+      "appReadyTimeout": 15000,
+      "resetWhenUpdate": true
+    }
   }
 }

@@ -1,11 +1,13 @@
-# Сборка Сплава для iPhone: неподписанный .ipa для SideStore (подпись ставит сам SideStore)
+# Сплав для iPhone.
+# version       — версия интерфейса и логики: выпускается пакетом web-vX (приложение скачивает его само);
+# nativeVersion — версия нативной части: выпускается .ipa ios-vX для SideStore, только когда её поднимают.
 name: iPhone
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['mobile/**', 'src/main.js', 'src/keys.json', '!mobile/source.json']
+    paths: ['mobile/**', 'src/main.js', 'src/keys.json', '!mobile/source.json', '!mobile/web.json']
 
 permissions:
   contents: write
@@ -23,34 +25,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Версия
+      - name: Версии
         id: v
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=ios-v$VERSION" >> "$GITHUB_OUTPUT"
-          if git ls-remote --exit-code --tags origin "refs/tags/ios-v$VERSION" >/dev/null 2>&1; then
-            echo "exists=yes" >> "$GITHUB_OUTPUT"; echo "Версия $VERSION уже выпущена: поднимите version в mobile/package.json, чтобы выпустить новую"
-          else
-            echo "exists=no" >> "$GITHUB_OUTPUT"
-          fi
+          WEB=$(node -p "require('./package.json').version")
+          NATIVE=$(node -p "require('./package.json').nativeVersion || require('./package.json').version")
+          echo "web=$WEB" >> "$GITHUB_OUTPUT"; echo "native=$NATIVE" >> "$GITHUB_OUTPUT"
+          has() { git ls-remote --exit-code --tags origin "refs/tags/$1" >/dev/null 2>&1 && echo yes || echo no; }
+          echo "webExists=$(has web-v$WEB)" >> "$GITHUB_OUTPUT"
+          echo "nativeExists=$(has ios-v$NATIVE)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Зависимости
-        run: npm ci
-
       - name: Интерфейс
-        run: node build.mjs --min && npx cap sync ios
+        run: npm ci && node build.mjs --min
+
+      - name: Пакет обновления
+        if: steps.v.outputs.webExists == 'no'
+        run: cd www && zip -qr ../web.zip . && cd .. && ls -la web.zip
+
+      - name: Выпуск обновления
+        if: steps.v.outputs.webExists == 'no'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: web-v${{ steps.v.outputs.web }}
+          name: Сплав для iPhone, обновление ${{ steps.v.outputs.web }}
+          body: ${{ format('Обновление приходит само. Нужна основа версии {0} или новее.', steps.v.outputs.native) }}
+          files: mobile/web.zip
+          make_latest: false
 
       - name: Сборка .ipa
+        if: steps.v.outputs.nativeExists == 'no'
         run: |
+          npx cap sync ios
           xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            MARKETING_VERSION=${{ steps.v.outputs.version }} CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            MARKETING_VERSION=${{ steps.v.outputs.native }} CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             build | tail -n 40
           test -d build/Build/Products/Release-iphoneos/App.app
           mkdir -p Payload && cp -R build/Build/Products/Release-iphoneos/App.app Payload/
@@ -60,30 +73,29 @@ jobs:
           zip -qry Splav.ipa Payload
           ls -la Splav.ipa
 
-      - name: Сохранить сборку
-        uses: actions/upload-artifact@v4
-        with:
-          name: Splav-ipa
-          path: mobile/Splav.ipa
-
-      - name: Выпуск
-        if: steps.v.outputs.exists == 'no'
+      - name: Выпуск для SideStore
+        if: steps.v.outputs.nativeExists == 'no'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.v.outputs.tag }}
-          name: Сплав для iPhone ${{ steps.v.outputs.version }}
+          tag_name: ios-v${{ steps.v.outputs.native }}
+          name: Сплав для iPhone ${{ steps.v.outputs.native }}
           body_path: mobile/RELEASE.md
           files: mobile/Splav.ipa
           make_latest: false
 
-      - name: Обновить источник SideStore
-        if: steps.v.outputs.exists == 'no'
+      - name: Обновить источники
+        if: steps.v.outputs.webExists == 'no' || steps.v.outputs.nativeExists == 'no'
         run: |
           git config user.name "splav-bot"
           git config user.email "splav-bot@users.noreply.github.com"
+          cp Splav.ipa /tmp/Splav.ipa 2>/dev/null || true
           git fetch origin main
           git checkout -B main origin/main
-          node scripts/source.mjs Splav.ipa "${{ github.repository }}" "${{ steps.v.outputs.tag }}"
-          git add source.json
-          git commit -m "Источник SideStore: версия ${{ steps.v.outputs.version }}" || exit 0
+          if [ "${{ steps.v.outputs.nativeExists }}" = "no" ]; then node scripts/source.mjs /tmp/Splav.ipa "${{ github.repository }}" "ios-v${{ steps.v.outputs.native }}"; fi
+          if [ "${{ steps.v.outputs.webExists }}" = "no" ]; then
+            printf '{\n  "version": "%s",\n  "minNative": "%s",\n  "url": "https://github.com/%s/releases/download/web-v%s/web.zip"\n}\n' \
+              "${{ steps.v.outputs.web }}" "${{ steps.v.outputs.native }}" "${{ github.repository }}" "${{ steps.v.outputs.web }}" > web.json
+          fi
+          git add source.json web.json 2>/dev/null || git add -A .
+          git commit -m "Источники: интерфейс ${{ steps.v.outputs.web }}, основа ${{ steps.v.outputs.native }}" || exit 0
           git push origin main

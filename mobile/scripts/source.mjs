@@ -20,7 +20,7 @@ const src = {
     category: 'entertainment',
     screenshots: [],
     versions: [{
-      version: pkg.version,
+      version: pkg.nativeVersion || pkg.version,
       buildVersion: process.env.GITHUB_RUN_NUMBER || '1',
       date: new Date().toISOString(),
       localizedDescription: pkg.releaseNotes || '',
