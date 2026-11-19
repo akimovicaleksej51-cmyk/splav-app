@@ -1,0 +1,63 @@
+# Сборка Сплава для Mac: Splav-mac.zip в релиз mac-vВЕРСИЯ, контрольная сумма — в описании релиза
+name: Mac
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['src/**', 'package.json', 'build/**']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mac
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Версия
+        id: v
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/mac-v$VERSION" >/dev/null 2>&1; then
+            echo "exists=yes" >> "$GITHUB_OUTPUT"; echo "Версия $VERSION уже выпущена"
+          else echo "exists=no" >> "$GITHUB_OUTPUT"; fi
+
+      - uses: actions/setup-node@v4
+        if: steps.v.outputs.exists == 'no'
+        with:
+          node-version: 22
+
+      - name: Сборка
+        if: steps.v.outputs.exists == 'no'
+        run: |
+          npm ci
+          npx @electron/packager . "Сплав" --platform=darwin --arch=arm64 --icon=build/icon.icns \
+            --app-bundle-id=com.splav.player --app-version=${{ steps.v.outputs.version }} --out=dist --overwrite \
+            --extend-info=build/extra.plist --darwin-dark-mode-support \
+            --ignore="^/build" --ignore="^/dist" --ignore="^/mobile" --ignore="^/\.github" \
+            --ignore="node_modules/@fontsource" --ignore="node_modules/@fontsource-variable" --ignore="node_modules/three" \
+            --ignore="node_modules/hls.js" --ignore="node_modules/@electron" --ignore="node_modules/electron$"
+          cd "dist/Сплав-darwin-arm64"
+          codesign --force --deep --sign - "Сплав.app"
+          ditto -c -k --sequesterRsrc --keepParent "Сплав.app" "$GITHUB_WORKSPACE/Splav-mac.zip"
+          cd "$GITHUB_WORKSPACE"
+          SHA=$(shasum -a 256 Splav-mac.zip | cut -d' ' -f1)
+          printf 'Сплав для Mac %s\n\nsha256: %s\n' "${{ steps.v.outputs.version }}" "$SHA" > mac-notes.md
+          cat mac-notes.md
+
+      - name: Выпуск
+        if: steps.v.outputs.exists == 'no'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mac-v${{ steps.v.outputs.version }}
+          name: Сплав для Mac ${{ steps.v.outputs.version }}
+          body_path: mac-notes.md
+          files: Splav-mac.zip
+          make_latest: true
