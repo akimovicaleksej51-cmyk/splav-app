@@ -52,7 +52,8 @@ async function applyDownloaded() {
   if (!isNative) return false;
   try {
     const { bundles } = await CapacitorUpdater.list();
-    const ready = (bundles || []).filter(b => b.status === 'success' && b.version && cmpVer(b.version, pkg.version) > 0).sort((a, b) => cmpVer(b.version, a.version))[0];
+    // скачанный пакет плагин помечает «pending», а после первого запуска — «success»
+    const ready = (bundles || []).filter(b => (b.status === 'success' || b.status === 'pending') && b.version && cmpVer(b.version, pkg.version) > 0).sort((a, b) => cmpVer(b.version, a.version))[0];
     if (!ready) return false;
     localStorage.setItem('splav.updatedTo', ready.version);
     await CapacitorUpdater.set({ id: ready.id });
@@ -71,14 +72,18 @@ async function checkWeb(manual) {
     if (m.minNative && cmpVer(nat, m.minNative) < 0) return false;   // нужна новая нативная часть — это через SideStore
     step = 'список загрузок';
     const { bundles } = await CapacitorUpdater.list();
-    if (!(bundles || []).some(b => b.version === m.version && b.status === 'success')) {
+    let b = (bundles || []).find(x => x.version === m.version && (x.status === 'success' || x.status === 'pending'));
+    if (!b) {
       step = 'скачивание';
       if (manual) toast(`Скачиваем версию ${m.version}…`);
-      await CapacitorUpdater.download({ url: m.url, version: m.version, checksum: m.checksum || '' });
+      b = await CapacitorUpdater.download({ url: m.url, version: m.version, checksum: m.checksum || '' });
     }
-    if (manual) toast(`Версия ${m.version} скачана. Применяем…`);
-    step = 'применение';
-    if (manual || !document.body.classList.contains('playing')) await applyDownloaded();
+    if (manual || !document.body.classList.contains('playing')) {
+      step = 'применение';
+      if (manual) toast(`Версия ${m.version} скачана, перезапускаем…`);
+      localStorage.setItem('splav.updatedTo', m.version);
+      await CapacitorUpdater.set({ id: b.id });
+    }
     return true;
   } catch (e) {
     lastWebError = `${step}: ${e && e.message || e}`;
