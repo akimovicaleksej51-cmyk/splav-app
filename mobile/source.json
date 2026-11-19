@@ -17,12 +17,12 @@
       "screenshots": [],
       "versions": [
         {
-          "version": "1.0.4",
-          "buildVersion": "5",
-          "date": "2026-11-19T14:37:52.437Z",
-          "localizedDescription": "Сплав теперь обновляется сам, без SideStore",
-          "downloadURL": "https://github.com/akimovicaleksej51-cmyk/splav-app/releases/download/ios-v1.0.4/Splav.ipa",
-          "size": 1434077,
+          "version": "1.0.7",
+          "buildVersion": "8",
+          "date": "2026-11-19T15:06:20.320Z",
+          "localizedDescription": "Свайп по мини-плееру, вход в SoundCloud через Apple, уведомления можно смахнуть, исправлено автообновление",
+          "downloadURL": "https://github.com/akimovicaleksej51-cmyk/splav-app/releases/download/ios-v1.0.7/Splav.ipa",
+          "size": 1435157,
           "minOSVersion": "15.0"
         }
       ],
