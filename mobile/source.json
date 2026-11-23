@@ -17,12 +17,12 @@
       "screenshots": [],
       "versions": [
         {
-          "version": "1.1.2",
-          "buildVersion": "14",
-          "date": "2026-11-19T15:58:30.016Z",
-          "localizedDescription": "Волна по жанру, итоги месяца, новинки и чарт в поиске, реакции, приглашение ссылкой. Исправлено автообновление",
-          "downloadURL": "https://github.com/akimovicaleksej51-cmyk/splav-app/releases/download/ios-v1.1.2/Splav.ipa",
-          "size": 1441875,
+          "version": "1.2.0",
+          "buildVersion": "17",
+          "date": "2026-11-23T07:09:59.163Z",
+          "localizedDescription": "Музыка сама продолжается после звонка, без обрывов в фоне и пауз между песнями",
+          "downloadURL": "https://github.com/akimovicaleksej51-cmyk/splav-app/releases/download/ios-v1.2.0/Splav.ipa",
+          "size": 1444262,
           "minOSVersion": "15.0"
         }
       ],
