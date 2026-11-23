@@ -5,10 +5,15 @@ import { openArtist, trackMenu, renderWave } from './views.js';
 import { room, roomPublish, roomTrack } from './together.js';
 import { Native, isNative } from '../core/native.js';
 
-export const audio = new Audio();
-audio.preload = 'auto';
-audio.setAttribute('playsinline', '');
-document.body.appendChild(audio);
+// два проигрывателя: следующий трек грузится заранее на запасной, переключение мгновенное и без сети
+const mkDeck = () => { const a = new Audio(); a.preload = 'auto'; a.setAttribute('playsinline', ''); document.body.appendChild(a); return a; };
+const decks = [mkDeck(), mkDeck()];
+export let audio = decks[0];
+const spareDeck = () => (decks[0] === audio ? decks[1] : decks[0]);
+const onDeck = (ev, fn) => decks.forEach(d => d.addEventListener(ev, e => { if (d === audio) fn(e); }));
+// пауза, которую поставил человек (или комната), — её не надо «чинить» после звонка
+let userPaused = false, sysPausedAt = 0;
+export function userPause() { userPaused = true; audio.pause(); }
 
 export const isPlaying = () => !audio.paused && !audio.ended;
 export const curTime = () => audio.currentTime || 0;
@@ -28,23 +33,50 @@ function flushListen() {
 
 /* ---------- движок ---------- */
 let playToken = 0;
+const pre = { key: null, el: null, at: 0, busy: false };
+function dropPrefetch() { if (pre.el && pre.el !== audio) { pre.el.removeAttribute('src'); pre.el.load(); } pre.key = null; pre.el = null; }
+// заранее получаем ссылку на следующий трек и начинаем его грузить
+async function prefetchNext() {
+  if (pre.busy || room.role === 'guest') return;
+  const t = state.queue[state.qi + 1]; if (!t || t.locked || t.available === false) return;
+  const k = key(t); if (pre.key === k && Date.now() - pre.at < 8 * 60e3) return;
+  pre.busy = true;
+  try {
+    const { url } = await API.stream(t);
+    if (state.queue[state.qi + 1] !== t) return;
+    const el = spareDeck(); el.src = url; el.load();
+    Object.assign(pre, { key: k, el, at: Date.now() });
+  } catch { pre.key = null; }
+  finally { pre.busy = false; }
+}
+function afterStart(t) {
+  if (state.mode === 'wave') API.waveFeedback({ type: 'trackStarted', track: t }).catch(() => {});
+  if (room.role === 'host') roomPublish(true);
+  if (state.mode === 'wave' && state.queue.length - state.qi <= 3) loadMoreWave();
+}
 export async function playTrack(t) {
   if (t.locked) { const { askLogin } = await import('./views.js'); askLogin(t.locked); return; }
   const token = ++playToken;
   flushListen();
-  listen.track = t;
-  state.current = t;
-  renderNow();
+  listen.track = t; state.current = t; retried = false;
+  // следующий трек уже загружен — переключаемся сразу, без ожидания сети (важно в фоне)
+  if (pre.key === key(t) && pre.el && Date.now() - pre.at < 8 * 60e3) {
+    const old = audio, el = pre.el; pre.key = null; pre.el = null;
+    audio = el; audio.playbackRate = 1; userPaused = false;
+    old.pause(); old.removeAttribute('src'); old.load();
+    const p = audio.play();
+    renderNow();
+    try { await p; afterStart(t); return; } catch (e) { if (token !== playToken) return; /* ниже — обычный путь */ }
+  } else { dropPrefetch(); renderNow(); }
   try {
     const { url } = await API.stream(t);
     if (token !== playToken) return;
-    audio.src = url;
+    audio.src = url; userPaused = false;
     await audio.play();
-    if (state.mode === 'wave') API.waveFeedback({ type: 'trackStarted', track: t }).catch(() => {});
-    if (room.role === 'host') roomPublish(true);
+    afterStart(t);
   } catch (e) {
     if (token !== playToken) return;
-    if (e && e.name === 'NotAllowedError') { syncPlaying(); return; }   // iOS не дал запустить звук без касания
+    if (e && e.name === 'NotAllowedError') { sysPausedAt = Date.now(); syncPlaying(); return; }   // iOS не дал запустить звук — продолжим, когда вернётесь
     toast(`Не удалось включить «${t.title}». ${e.message || ''}`.trim());
     setTimeout(() => { if (token === playToken) next(false); }, 1200);
   }
@@ -63,11 +95,10 @@ export async function next(userSkip = true) {
   if (state.mode === 'wave' && cur && userSkip) API.waveFeedback({ type: 'skip', track: cur, played: curTime() }).catch(() => {});
   if (state.qi + 1 >= state.queue.length) {
     if (state.mode === 'wave') await loadMoreWave();
-    if (state.qi + 1 >= state.queue.length) { audio.pause(); return; }
+    if (state.qi + 1 >= state.queue.length) { userPause(); return; }
   }
   state.qi++;
   playTrack(state.queue[state.qi]);
-  if (state.mode === 'wave' && state.queue.length - state.qi <= 2) loadMoreWave();
 }
 export function prev() {
   if (room.role === 'guest') { toast('Треки выбирает хозяин комнаты'); return; }
@@ -77,20 +108,47 @@ export function prev() {
 export function togglePlay() {
   if (!state.current) { startWave(); return; }
   haptic();
-  if (audio.paused) audio.play().catch(() => {}); else audio.pause();
+  if (audio.paused) { userPaused = false; sysPausedAt = 0; audio.play().catch(() => {}); } else userPause();
 }
 
-audio.addEventListener('ended', () => {
+onDeck('ended', () => {
   if (state.mode === 'wave' && state.current) API.waveFeedback({ type: 'trackFinished', track: state.current, played: curDur() }).catch(() => {});
   next(false);
 });
-audio.addEventListener('timeupdate', () => {
+onDeck('timeupdate', () => {
   const c = curTime(); const dt = c - listen.lastT; if (dt > 0 && dt < 2) listen.secs += dt; listen.lastT = c;
+  // за 40 секунд до конца готовим следующий трек
+  const d = curDur(); if (d && d - c < 40 && !pre.busy && pre.key !== (state.queue[state.qi + 1] && key(state.queue[state.qi + 1]))) prefetchNext();
+  if (d && d - c < 60 && state.mode === 'wave' && state.qi + 1 >= state.queue.length) loadMoreWave();
   updateTime(); syncLyrics();
 });
-audio.addEventListener('play', syncPlaying);
-audio.addEventListener('pause', () => { syncPlaying(); if (room.role === 'host') roomPublish(); });
-audio.addEventListener('playing', () => { syncPlaying(); if (room.role === 'host') roomPublish(); });
+onDeck('play', syncPlaying);
+onDeck('pause', () => {
+  syncPlaying(); if (room.role === 'host') roomPublish();
+  if (!userPaused && !audio.ended && state.current) sysPausedAt = Date.now();   // остановила система: звонок, Siri, другое приложение
+  userPaused = false;
+});
+onDeck('playing', () => { sysPausedAt = 0; syncPlaying(); if (room.role === 'host') roomPublish(); });
+// оборвался поток посреди трека — пробуем переподключиться с того же места, потом — следующий
+let retried = false;
+onDeck('error', async () => {
+  const t = state.current; if (!t) return;
+  if (retried) { toast(`«${t.title}» не грузится, включаем следующий`); next(false); return; }
+  retried = true;
+  const at = curTime(), token = playToken;
+  try { const { url } = await API.stream(t); if (token !== playToken) return; audio.src = url; audio.currentTime = at; await audio.play(); } catch { if (token === playToken) next(false); }
+});
+// после звонка или другого перерыва — продолжаем, если паузу ставили не вы
+export function resumeAfterInterruption() {
+  if (!sysPausedAt || !state.current || room.role === 'guest' && !(room.st && room.st.playing)) return;
+  if (Date.now() - sysPausedAt > 30 * 60e3) { sysPausedAt = 0; return; }
+  let tries = 0;
+  const attempt = () => { if (!sysPausedAt) return; audio.play().then(() => { sysPausedAt = 0; }).catch(() => { if (++tries < 4) setTimeout(attempt, 700); }); };
+  attempt();
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) resumeAfterInterruption(); });
+window.addEventListener('focus', resumeAfterInterruption);
+if (isNative) Native.addListener('interruption', e => { if (e.state === 'ended') setTimeout(resumeAfterInterruption, 400); });
 
 /* ---------- волна ---------- */
 export function effectiveWave() {
@@ -409,7 +467,7 @@ function setupMediaHandlers() {
     const ms = navigator.mediaSession;
     const h = (a, f) => { try { ms.setActionHandler(a, f); } catch {} };
     h('play', () => audio.play());
-    h('pause', () => audio.pause());
+    h('pause', () => userPause());
     h('nexttrack', remoteNext);
     h('previoustrack', remotePrev);
     h('seekforward', null);
@@ -421,6 +479,6 @@ function setupMediaHandlers() {
 setupMediaHandlers();
 if (isNative) Native.addListener('remote', e => (e.cmd === 'next' ? remoteNext : remotePrev)());
 // WebKit сам возвращает перемотку при смене трека, поэтому переставляем кнопки после старта
-audio.addEventListener('playing', () => { setupMediaHandlers(); setTimeout(setupMediaHandlers, 600); setTimeout(setupMediaHandlers, 2000); });
-audio.addEventListener('pause', () => setTimeout(setupMediaHandlers, 300));
+onDeck('playing', () => { setupMediaHandlers(); setTimeout(setupMediaHandlers, 600); setTimeout(setupMediaHandlers, 2000); });
+onDeck('pause', () => setTimeout(setupMediaHandlers, 300));
 export { roomTrack };

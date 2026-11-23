@@ -363,8 +363,9 @@ handle('state', async () => {
     catch (e) { if (e.message === 'YA_AUTH') { config.yaToken = null; saveConfig(); } else st.ya = { name: 'Яндекс', offline: true }; }
   }
   if (config.scToken) {
-    try { const me = await sc('/me'); scUserId = me.id; st.sc = { name: me.username }; }
-    catch { st.sc = null; }
+    // вход забываем, только если SoundCloud прямо отказал; при сбое сети вход остаётся
+    try { const me = await sc('/me'); scUserId = me.id; st.sc = { name: me.username }; if (config.scName !== me.username) { config.scName = me.username; saveConfig(); } }
+    catch (e) { st.sc = /SoundCloud: (401|403)/.test(e.message) ? null : { name: config.scName || 'SoundCloud', offline: true }; }
   }
   if (config.zvToken) {
     try { const pr = await zvProfile(config.zvToken); st.zv = pr && !pr.anon ? { name: pr.name || 'Звук', sub: pr.sub } : null; if (!st.zv) { config.zvToken = null; saveConfig(); } }

@@ -1,7 +1,7 @@
 // «Вместе»: комнаты по коду из 6 цифр, друзья и отправка треков
 import { API } from './api.js';
 import { $, $$, esc, cssUrl, ico, toast, haptic, state, sheet, actions, push, pop, plural, onTab, timeAgo, bindRows, SOURCE } from './lib.js';
-import { playTrack, playQueue, seekTo, curTime, isPlaying, audio, syncPlaying } from './player.js';
+import { playTrack, playQueue, seekTo, curTime, isPlaying, audio, syncPlaying, userPause } from './player.js';
 
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { isNative } from '../core/native.js';
@@ -111,7 +111,7 @@ async function roomApply(d) {
     if (!mine) { toast(`«${t.title}» недоступен у вас: нет подходящего источника`); return; }
     room.applying = true;
     state.mode = 'room'; state.queue = [mine]; state.qi = 0;
-    const done = () => { if (!room.applying) return; room.applying = false; if (room.st.playing) seekTo(Math.max(0, roomExpected() + 0.08)); else { seekTo(room.st.position); audio.pause(); } };
+    const done = () => { if (!room.applying) return; room.applying = false; if (room.st.playing) seekTo(Math.max(0, roomExpected() + 0.08)); else { seekTo(room.st.position); userPause(); } };
     if (false) { await playTrack(mine); setTimeout(done, 900); return; }
     // как только трек реально заиграл — сразу встаём в ту же секунду, что и хозяин
     await playTrack(mine);
@@ -126,7 +126,7 @@ async function roomApply(d) {
   }
   if (!state.current || room.applying) return;
   if (st.playing && !isPlaying()) { audio.play().catch(() => {}); }
-  if (!st.playing && isPlaying()) { audio.pause(); }
+  if (!st.playing && isPlaying()) { userPause(); }
   if (!st.playing && Math.abs(curTime() - st.position) > 0.5) seekTo(st.position);
   if (!false) roomDrift();
   else if (st.playing && Math.abs(curTime() - roomExpected()) > 1.5) seekTo(Math.max(0, roomExpected()));
