@@ -50,6 +50,27 @@ public class SplavNativePlugin: CAPPlugin, CAPBridgedPlugin {
 
     private var remoteReady = false
 
+    // звонок, Siri, будильник: iOS сообщает, когда перерыв закончился и можно продолжать
+    override public func load() {
+        NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
+            guard let info = note.userInfo,
+                  let raw = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+            if type == .began {
+                self?.notifyListeners("interruption", data: ["state": "began"])
+            } else {
+                try? AVAudioSession.sharedInstance().setActive(true)
+                var resume = true
+                if let o = info[AVAudioSessionInterruptionOptionKey] as? UInt { resume = AVAudioSession.InterruptionOptions(rawValue: o).contains(.shouldResume) }
+                self?.notifyListeners("interruption", data: ["state": "ended", "resume": resume])
+            }
+        }
+        NotificationCenter.default.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main) { _ in
+            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
+            try? AVAudioSession.sharedInstance().setActive(true)
+        }
+    }
+
     /// Экран блокировки: «трек назад / трек вперёд» вместо перемотки на 10 секунд
     @objc func remoteCommands(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
