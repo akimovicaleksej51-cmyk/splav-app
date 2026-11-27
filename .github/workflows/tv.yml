@@ -1,0 +1,91 @@
+# Сплав для телевизора (Android TV / Google TV): Splav-TV.apk в релиз tv-vВЕРСИЯ.
+# Новая версия выходит, когда в tv/package.json поднимают "version".
+# Подпись: секреты TV_KEYSTORE (файл ключа в base64) и TV_KEYSTORE_PASSWORD.
+# Без них APK всё равно соберётся, но только как файл сборки, без релиза:
+# APK с другой подписью нельзя поставить поверх уже установленного.
+name: TV
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['tv/**', 'mobile/core/**', 'mobile/app/api.js', 'src/main.js', 'src/keys.json', 'src/renderer/fonts/**']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tv
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tv
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Версия
+        id: v
+        env:
+          HAS_KEY: ${{ secrets.TV_KEYSTORE != '' }}
+        run: |
+          V=$(node -p "require('./package.json').version")
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/tv-v$V" >/dev/null 2>&1; then echo "exists=yes" >> "$GITHUB_OUTPUT"; else echo "exists=no" >> "$GITHUB_OUTPUT"; fi
+          echo "signed=$HAS_KEY" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        if: steps.v.outputs.exists == 'no'
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        if: steps.v.outputs.exists == 'no'
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Интерфейс и ядро
+        if: steps.v.outputs.exists == 'no'
+        run: npm ci && node build.mjs --min && npx cap sync android
+
+      - name: Ключ подписи
+        if: steps.v.outputs.exists == 'no' && steps.v.outputs.signed == 'true'
+        env:
+          KEY: ${{ secrets.TV_KEYSTORE }}
+        run: |
+          echo "$KEY" | base64 -d > "$RUNNER_TEMP/splav-tv.keystore"
+          echo "SPLAV_KEYSTORE=$RUNNER_TEMP/splav-tv.keystore" >> "$GITHUB_ENV"
+
+      - name: Сборка APK
+        if: steps.v.outputs.exists == 'no'
+        working-directory: tv/android
+        env:
+          SPLAV_KEYSTORE_PASSWORD: ${{ secrets.TV_KEYSTORE_PASSWORD }}
+          SPLAV_BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          chmod +x gradlew
+          if [ -n "$SPLAV_KEYSTORE" ]; then ./gradlew assembleRelease --no-daemon; cp app/build/outputs/apk/release/app-release.apk ../Splav-TV.apk
+          else ./gradlew assembleDebug --no-daemon; cp app/build/outputs/apk/debug/app-debug.apk ../Splav-TV.apk
+            echo "::warning::Нет секретов TV_KEYSTORE и TV_KEYSTORE_PASSWORD: APK собран с временной подписью и выложен только как файл сборки"; fi
+          ls -la ../Splav-TV.apk
+
+      - name: Файл сборки
+        if: steps.v.outputs.exists == 'no'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Splav-TV-${{ steps.v.outputs.version }}
+          path: tv/Splav-TV.apk
+
+      - name: Выпуск
+        if: steps.v.outputs.exists == 'no' && steps.v.outputs.signed == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: tv-v${{ steps.v.outputs.version }}
+          name: Сплав для ТВ ${{ steps.v.outputs.version }}
+          body_path: tv/RELEASE.md
+          files: tv/Splav-TV.apk
+          make_latest: false

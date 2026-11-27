@@ -736,5 +736,9 @@ body.lite .queue, body.lite .ctx, body.lite .sleep-pop, body.lite .modal { backg
 .fr-card small { padding-right: 34px; }
 .fr-p { position: absolute; right: 14px; bottom: 14px; width: 32px; height: 32px; border-radius: 50%; background: var(--bone); color: var(--obsidian); display: grid; place-items: center; }
 .fr-p svg { width: 14px; height: 14px; fill: currentColor; stroke: none; }
-.chart-n { width: 26px; flex-shrink: 0; text-align: center; font-family: var(--display); font-weight: 800; font-size: 15px; color: var(--fog); }
+.row.ranked { grid-template-columns: 30px 44px 1fr auto 34px 34px 48px; }
+.row.ranked.numbered { grid-template-columns: 30px 22px 44px 1fr auto 34px 34px 48px; }
+.chart-n { text-align: center; font-family: var(--display); font-weight: 800; font-size: 15px; color: var(--smoke); font-variant-numeric: tabular-nums; }
+.row.top1 .chart-n, .row.top2 .chart-n, .row.top3 .chart-n { font-size: 18px; color: var(--bone); }
+.row.top1 .chart-n { color: var(--blood); }
 .dt-head-simple { padding: 10px 40px 20px; }

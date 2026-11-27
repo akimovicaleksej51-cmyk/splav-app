@@ -661,16 +661,22 @@ async function renderSearchHome() {
   if (chart.length) {
     // весь чарт в очереди, но на главной показываем первые 10
     renderList($('#chartTop', db), chart, '', { context: { type: 'search', label: 'Чарт' } });
-    $$('#chartTop .row', db).forEach((row, i) => { row.insertAdjacentHTML('afterbegin', `<span class="chart-n">${i + 1}</span>`); if (i >= 10) row.classList.add('hidden'); });
+    $$('#chartTop .row', db).forEach((row, i) => { rankRow(row, i); if (i >= 10) row.classList.add('hidden'); });
     $('#chartAll', db).addEventListener('click', () => { closeNp(); nav.stack.push({ type: 'chart' }); renderDetail(); });
   }
+}
+// место в чарте — отдельная колонка сетки строки, первая тройка выделена
+function rankRow(row, i) {
+  row.classList.add('ranked');
+  if (i < 3) row.classList.add('top' + (i + 1));
+  row.insertAdjacentHTML('afterbegin', `<span class="chart-n">${i + 1}</span>`);
 }
 function renderChartPage(page) {
   const chart = (discData.d && discData.d.chart) || [];
   page.innerHTML = `<button class="dt-back" id="dtBack">${BACK_SVG}Назад</button><div class="dt-head-simple"><div class="display" style="font-size:44px">Чарт</div><div class="dt-sub">Обновляется по четвергам</div></div><div class="list" id="chartFull"></div>`;
   $('#dtBack').addEventListener('click', goBack);
   renderList($('#chartFull'), chart, 'Чарт пока недоступен', { context: { type: 'search', label: 'Чарт' } });
-  $$('#chartFull .row').forEach((row, i) => row.insertAdjacentHTML('afterbegin', `<span class="chart-n">${i + 1}</span>`));
+  $$('#chartFull .row').forEach(rankRow);
 }
 
 function renderLocked(list) {

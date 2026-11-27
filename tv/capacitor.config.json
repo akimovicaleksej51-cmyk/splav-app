@@ -1,0 +1,22 @@
+{
+  "appId": "com.splav.tv",
+  "appName": "Сплав",
+  "webDir": "www",
+  "backgroundColor": "#060608",
+  "android": {
+    "backgroundColor": "#060608",
+    "allowMixedContent": false,
+    "captureInput": false,
+    "webContentsDebuggingEnabled": false
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    },
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "backgroundColor": "#060608",
+      "showSpinner": false
+    }
+  }
+}
