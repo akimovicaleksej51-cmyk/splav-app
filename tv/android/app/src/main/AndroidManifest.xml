@@ -41,6 +41,8 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- обновление по одной кнопке: Сплав скачивает новую версию и открывает установщик -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- телевизор: пульт вместо экрана, приложение видно в лаунчере Android TV и Google TV -->
     <uses-feature android:name="android.software.leanback" android:required="false" />

@@ -1,6 +1,7 @@
 // Экраны телевизора: Главная (волна, чарт, новинки, жанры), Чарт, Моя музыка, Поиск, Аккаунты, альбомы
 import { API } from '../../mobile/app/api.js';
 import { $, $$, esc, cssUrl, bigCover, key, ico, toast, state, plural, SOURCE, focus, focusFirst, remember, menu } from './lib.js';
+import { updateBanner, checkUpdates, VERSION } from './update.js';
 import { playQueue, startWave, togglePlay, next, toggleLike, dislike, openPlayer, isPlaying, effectiveWave } from './player.js';
 
 /* ---------- боковое меню ---------- */
@@ -60,7 +61,7 @@ function renderList(box, list, { onPlay, empty = '', chunk = 60, ranked = false 
   if (list.length) more();
   box.onclick = e => {
     const b = e.target.closest('button'); if (!b) return;
-    if (b.dataset.i !== undefined) onPlay(+b.dataset.i);
+    if (b.dataset.i !== undefined) { onPlay(+b.dataset.i); openPlayer(); }
     else if (b.dataset.like !== undefined) { const t = list[+b.dataset.like]; toggleLike(t); b.classList.toggle('on', state.liked.has(key(t))); }
     else if (b.dataset.more !== undefined) trackMenu(list[+b.dataset.more]);
   };
@@ -96,6 +97,7 @@ const GENRES = [['rap', 'Рэп'], ['phonk', 'Фонк'], ['pop', 'Поп'], ['i
 renderers.wave = () => {
   const el = $('#main');
   el.innerHTML = `
+    <div data-upd-box>${updateBanner()}</div>
     <section class="hero" data-zone="hero">
       <div class="h-art" id="hArt"><div class="orb"><i></i><i></i><i></i></div><div class="h-cv" id="hCv"></div></div>
       <div class="h-info">
@@ -146,12 +148,12 @@ async function renderDiscover() {
   if (!$('#discBox') || state.tab !== 'wave' || sub) return;
   const { chart = [], releases = [] } = d;
   box.innerHTML = `${chart.length ? `<div class="sec-title">Чарт недели<button class="f link" id="chAll">Весь чарт</button></div>
-      <div class="cards" data-zone="chartrow">${chart.slice(0, 10).map((t, i) => `<button class="f tcard ranked" data-c="${i}" data-k="${esc(key(t))}"><span class="big-n">${i + 1}</span><i class="tc-cv" style="background-image:${esc(cssUrl(bigCover(t.cover)))}">${eq}</i><b>${esc(t.title)}</b><small>${esc(t.artist)}</small></button>`).join('')}</div>` : ''}
+      <div class="cards" data-zone="chartrow">${chart.slice(0, 10).map((t, i) => `<button class="f tcard ranked" data-c="${i}" data-k="${esc(key(t))}"><span class="big-n">${i + 1}</span><i class="tc-cv" style="background-image:${esc(cssUrl(t.cover))}">${eq}</i><b>${esc(t.title)}</b><small>${esc(t.artist)}</small></button>`).join('')}</div>` : ''}
     ${releases.length ? `<div class="sec-title">Новинки недели</div>
-      <div class="cards" data-zone="relrow">${releases.slice(0, 16).map((x, i) => `<button class="f tcard" data-r="${i}"><i class="tc-cv" style="background-image:${esc(cssUrl(bigCover(x.cover)))}"></i><b>${esc(x.title)}</b><small>${esc(x.artist || (x.track && x.track.artist) || '')}</small></button>`).join('')}</div>` : ''}`;
+      <div class="cards" data-zone="relrow">${releases.slice(0, 16).map((x, i) => `<button class="f tcard" data-r="${i}"><i class="tc-cv" style="background-image:${esc(cssUrl(x.cover))}"></i><b>${esc(x.title)}</b><small>${esc(x.artist || (x.track && x.track.artist) || '')}</small></button>`).join('')}</div>` : ''}`;
   const k = state.current && key(state.current);
   $$('[data-k]', box).forEach(c => c.classList.toggle('now', c.dataset.k === k));
-  $$('[data-c]', box).forEach(b => b.onclick = () => playQueue(chart, +b.dataset.c, 'list', 'Чарт'));
+  $$('[data-c]', box).forEach(b => b.onclick = () => { playQueue(chart, +b.dataset.c, 'list', 'Чарт'); openPlayer(); });
   $$('[data-r]', box).forEach(b => b.onclick = () => { subReturn = `[data-r="${b.dataset.r}"]`; openRelease(releases[+b.dataset.r]); });
   const all = $('#chAll'); if (all) all.onclick = () => { showTab('chart'); focusFirst($('#main')); };
 }
@@ -185,8 +187,8 @@ renderers.chart = async () => {
   const list = d.chart || [];
   $('#chSub').textContent = list.length ? `${plural(list.length, 'трек', 'трека', 'треков')} · обновляется по четвергам` : 'Обновляется по четвергам';
   renderList($('#cList'), list, { onPlay: i => playQueue(list, i, 'list', 'Чарт'), empty: 'Чарт пока недоступен', ranked: true });
-  $('#cPlay').onclick = () => list.length && playQueue(list, 0, 'list', 'Чарт');
-  $('#cShuf').onclick = () => { if (!list.length) return; playQueue([...list].sort(() => Math.random() - 0.5), 0, 'list', 'Чарт'); };
+  $('#cPlay').onclick = () => { if (list.length) { playQueue(list, 0, 'list', 'Чарт'); openPlayer(); } };
+  $('#cShuf').onclick = () => { if (!list.length) return; playQueue([...list].sort(() => Math.random() - 0.5), 0, 'list', 'Чарт'); openPlayer(); };
 };
 
 /* ================= АЛЬБОМ ================= */
@@ -206,8 +208,8 @@ export async function openAlbum(source, id, hint = {}) {
     const artist = a.artist || (a.artists || []).map(x => x.name).join(', ');
     $('.al-info .h-sub').textContent = [artist, a.year, list.length ? plural(list.length, 'трек', 'трека', 'треков') : ''].filter(Boolean).join('  ·  ');
     renderList($('#alList'), list, { onPlay: i => playQueue(list, i, 'list', a.title || 'Альбом'), empty: 'В альбоме нет доступных треков' });
-    $('#alPlay').onclick = () => list.length && playQueue(list, 0, 'list', a.title || 'Альбом');
-    $('#alShuf').onclick = () => list.length && playQueue([...list].sort(() => Math.random() - 0.5), 0, 'list', a.title || 'Альбом');
+    $('#alPlay').onclick = () => { if (list.length) { playQueue(list, 0, 'list', a.title || 'Альбом'); openPlayer(); } };
+    $('#alShuf').onclick = () => { if (list.length) { playQueue([...list].sort(() => Math.random() - 0.5), 0, 'list', a.title || 'Альбом'); openPlayer(); } };
   };
   sub = draw;
   draw();
@@ -234,8 +236,8 @@ renderers.library = () => {
     </div>
     <div class="list" data-zone="list" id="lList"></div>`;
   renderList($('#lList'), list, { onPlay: i => playQueue(list, i, 'list', 'Моя музыка'), empty: state.guest ? '<b>Здесь будут ваши лайки</b>Нажмите на сердце в плеере или войдите в Яндекс, Звук или SoundCloud на вкладке «Аккаунты»' : '<b>Пока пусто</b>Лайкайте треки, и они появятся здесь' });
-  $('#lPlay').onclick = () => list.length && playQueue(list, 0, 'list', 'Моя музыка');
-  $('#lShuf').onclick = () => { if (!list.length) return; const s = [...list].sort(() => Math.random() - 0.5); playQueue(s, 0, 'list', 'Моя музыка'); };
+  $('#lPlay').onclick = () => { if (list.length) { playQueue(list, 0, 'list', 'Моя музыка'); openPlayer(); } };
+  $('#lShuf').onclick = () => { if (!list.length) return; const s = [...list].sort(() => Math.random() - 0.5); playQueue(s, 0, 'list', 'Моя музыка'); openPlayer(); };
   $$('[data-f]', el).forEach(b => b.onclick = () => { lib.f = b.dataset.f; renderers.library(); focus($(`[data-f="${lib.f}"]`)); });
 };
 document.addEventListener('likes-changed', () => { if (state.tab === 'library' && !sub && !$('#main').contains(document.activeElement)) renderers.library(); });
@@ -285,7 +287,7 @@ function renderSearchRes() {
   renderList($('#sList'), list, { onPlay: i => playQueue(list, i, 'list', 'Поиск: ' + search.q), empty: 'Ничего не нашлось' });
   $$('[data-a]', box).forEach(b => b.onclick = async () => {
     const a = artists[+b.dataset.a]; toast(`Включаем ${a.name}…`);
-    try { const d = await API.artist(a.source, a.id); const l = d.popular || []; if (l.length) playQueue(l, 0, 'list', a.name); else toast('У артиста нет доступных треков'); } catch (e) { toast(e.message); }
+    try { const d = await API.artist(a.source, a.id); const l = d.popular || []; if (l.length) { playQueue(l, 0, 'list', a.name); openPlayer(); } else toast('У артиста нет доступных треков'); } catch (e) { toast(e.message); }
   });
 }
 
@@ -305,19 +307,20 @@ export async function refreshState() {
 renderers.accounts = () => {
   const el = $('#main'), A = state.accounts;
   el.innerHTML = `<div class="page-head"><h1>Аккаунты</h1></div>
+    <div data-upd-box>${updateBanner()}</div>
     <div class="accs" data-zone="accs">${SERVICES.map(([k, name, logo, bg, fg, hint]) => `<div class="acc">
       <div class="acc-logo" style="background:${bg};color:${fg}">${logo}</div>
       <div class="acc-t"><b>${name}</b>${A[k] ? `<span class="ok">Подключено${A[k].name ? ': ' + esc(A[k].name) : ''}${A[k].offline ? ' (нет связи)' : ''}</span>` : `<span>${hint}</span>`}</div>
       ${A[k] ? `<button class="f btn" data-out="${k}">${ico('logout')}<span>Выйти</span></button>` : `<button class="f btn primary" data-in="${k}">Войти</button>`}</div>`).join('')}</div>
     <div class="note">Вход открывается в окне браузера. Буквы набираются экранной клавиатурой пульта, кнопка «Назад» закрывает окно.</div>
-    <div class="about" data-zone="about"><button class="f btn" id="aRefresh">${ico('refresh')}<span>Обновить музыку и чарт</span></button><span id="aVer"></span></div>`;
+    <div class="about" data-zone="about"><button class="f btn" id="aRefresh">${ico('refresh')}<span>Обновить музыку и чарт</span></button><button class="f btn" id="aUpd">Проверить новую версию</button><span>Сплав для ТВ ${VERSION}</span></div>`;
   $$('[data-in]', el).forEach(b => b.onclick = () => login(b.dataset.in));
   $$('[data-out]', el).forEach(b => b.onclick = async () => {
     const k = b.dataset.out;
     try { await API.logout(k); toast('Вы вышли'); await afterAccountChange(); } catch (e) { toast(e.message); }
   });
   $('#aRefresh').onclick = async () => { toast('Обновляем…'); resetDiscover(); await Promise.all([loadLikes(), API.discover({ artists: [], force: true }).then(d => { disc.data = d; }).catch(() => {})]); toast('Готово'); };
-  import('./main.js').then(m => { $('#aVer').textContent = 'Сплав для ТВ ' + m.VERSION; }).catch(() => {});
+  $('#aUpd').onclick = () => { toast('Проверяем…'); checkUpdates(true); };
 };
 async function afterAccountChange() {
   resetDiscover();
