@@ -2,7 +2,7 @@
 import qrcode from 'qrcode-generator';
 import { API } from '../../mobile/app/api.js';
 import { call } from '../../mobile/core/entry.js';
-import { newKey, linkUrl, open } from '../../mobile/core/tvlink.js';
+import { newKey, linkUrl, readPart, openText } from '../../mobile/core/tvlink.js';
 import { $, ico, toast, pushLayer, popLayer, focusFirst } from './lib.js';
 
 const NAMES = { ya: 'Яндекс', sc: 'SoundCloud', zv: 'Звук' };
@@ -35,16 +35,27 @@ export async function openPhoneLogin(onDone) {
   // ждём, пока телефон положит входы в комнату; код живёт 10 минут
   const until = Date.now() + 10 * 60e3;
   let v = 0;
+  const got = new Map();   // части данных: телефон шлёт их по очереди, телевизор подтверждает каждую
   const poll = async () => {
     if (closed) return;
     if (Date.now() > until) { $('#qlStatus', el).textContent = 'Код устарел. Закройте окно и откройте снова'; return; }
     try {
       const r = await API.room({ action: 'state', code: room.code, v });
       v = r.v;
-      const data = r.state && await open(r.state.track, key).catch(() => null);
-      if (data) { await apply(data); return; }
+      const part = r.state && readPart(r.state.track);
+      if (part && !got.has(part.i)) {
+        got.set(part.i, part.chunk);
+        if (got.size === part.n) {
+          const text = [...Array(part.n).keys()].map(i => got.get(i)).join('');
+          const data = await openText(text, key).catch(() => null);
+          if (data) { await apply(data); return; }
+          $('#qlStatus', el).textContent = 'Данные пришли повреждёнными. Закройте окно и попробуйте снова'; return;
+        }
+        $('#qlStatus', el).textContent = `Получаем данные… ${got.size} из ${part.n}`;
+        await API.room({ action: 'update', code: room.code, hostKey: room.hostKey, state: { track: { source: 'tvack', rawId: String(part.i), title: 'ok' }, playing: false, position: 0 } });
+      }
     } catch {}
-    timer = setTimeout(poll, 2000);
+    timer = setTimeout(poll, 1000);
   };
   const apply = async data => {
     $('#qlStatus', el).textContent = 'Входим…';

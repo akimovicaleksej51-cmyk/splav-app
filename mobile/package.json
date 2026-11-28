@@ -1,6 +1,6 @@
 {
   "name": "splav-mobile",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "private": true,
   "scripts": {
     "build": "node build.mjs",
@@ -24,7 +24,7 @@
     "js-sha256": "^0.11.0",
     "path-browserify": "^1.0.1"
   },
-  "releaseNotes": "Пульт для телевизора, вход на телевизоре по QR и напоминание, когда пора продлить подпись",
+  "releaseNotes": "Вход на телевизоре с телефона работает с любыми входами; понятное сообщение, когда вход в SoundCloud устарел",
   "nativeVersion": "1.3.0",
   "minNative": "1.2.0"
 }
