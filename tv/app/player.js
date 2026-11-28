@@ -3,25 +3,65 @@ import Hls from 'hls.js';
 import { API } from '../../mobile/app/api.js';
 import { $, $$, esc, fmt, cssUrl, bigCover, key, ico, toast, state, SOURCE, pushLayer, popLayer, focus, focusFirst, topLayer } from './lib.js';
 
-/* ---------- движок ---------- */
-export const audio = new Audio();
-audio.preload = 'auto';
-document.body.appendChild(audio);
-let hls = null;
-// SoundCloud часто отдаёт поток кусками (HLS): в Android WebView его играет hls.js
-function setSource(url, isHls) {
-  if (hls) { hls.destroy(); hls = null; }
+/* ---------- движок ----------
+   Два проигрывателя, как на iPhone: следующий трек заранее грузится на запасной,
+   и переключение идёт сразу, без паузы. На стыке — короткое затухание, чтобы не щёлкало. */
+const mkDeck = () => { const a = new Audio(); a.preload = 'auto'; a._hls = null; document.body.appendChild(a); return a; };
+const decks = [mkDeck(), mkDeck()];
+export let audio = decks[0];
+const spareDeck = () => (decks[0] === audio ? decks[1] : decks[0]);
+// события слушаем только у того проигрывателя, что сейчас играет
+const onDeck = (ev, fn) => decks.forEach(d => d.addEventListener(ev, e => { if (d === audio) fn(e); }));
+// SoundCloud часто отдаёт поток кусками (HLS): в Android WebView его играет hls.js в отдельном потоке
+function load(deck, url, isHls) {
+  unload(deck);
   if (isHls && Hls.isSupported()) {
-    hls = new Hls({ enableWorker: false, maxBufferLength: 30 });
-    hls.on(Hls.Events.ERROR, (_e, d) => { if (d.fatal) audio.dispatchEvent(new Event('error')); });
-    hls.loadSource(url); hls.attachMedia(audio);
-  } else { audio.src = url; }
+    const h = new Hls({ enableWorker: true, maxBufferLength: 30, backBufferLength: 10 });
+    h.on(Hls.Events.ERROR, (_e, d) => { if (d.fatal) deck.dispatchEvent(new Event('error')); });
+    h.loadSource(url); h.attachMedia(deck); deck._hls = h;
+  } else { deck.src = url; deck.load(); }
 }
+function unload(deck) {
+  if (deck._fade) { clearInterval(deck._fade); deck._fade = null; }
+  if (deck._hls) { deck._hls.destroy(); deck._hls = null; }
+  deck.pause(); deck.removeAttribute('src'); deck.load();
+}
+// плавно меняем громкость за ms миллисекунд
+function fade(deck, to, ms) {
+  return new Promise(resolve => {
+    const from = deck.volume, t0 = performance.now();
+    if (deck._fade) clearInterval(deck._fade);
+    deck._fade = setInterval(() => {
+      const k = Math.min(1, (performance.now() - t0) / ms);
+      deck.volume = from + (to - from) * k;
+      if (k >= 1) { clearInterval(deck._fade); deck._fade = null; resolve(); }
+    }, 20);
+  });
+}
+// старый трек затихает и выгружается, не мешая новому
+function retire(deck) { if (deck.paused) { unload(deck); return; } fade(deck, 0, 220).then(() => { if (deck !== audio) unload(deck); }); }
 
 export const isPlaying = () => !audio.paused && !audio.ended;
 export const curTime = () => audio.currentTime || 0;
 export const curDur = () => (isFinite(audio.duration) && audio.duration) || (state.current && state.current.duration) || 0;
 export function seekTo(sec) { try { audio.currentTime = Math.max(0, Math.min(sec, curDur() - 1)); } catch {} updateTime(); }
+
+// следующий трек: заранее берём ссылку и начинаем грузить на запасном проигрывателе
+const pre = { key: null, deck: null, at: 0, busy: false };
+function dropPrefetch() { if (pre.deck && pre.deck !== audio) unload(pre.deck); pre.key = null; pre.deck = null; }
+async function prefetchNext() {
+  if (pre.busy) return;
+  const t = state.queue[state.qi + 1]; if (!t || t.locked || t.available === false) return;
+  const k = key(t); if (pre.key === k && Date.now() - pre.at < 8 * 60e3) return;
+  pre.busy = true;
+  try {
+    const s = await API.stream(t);
+    if (state.queue[state.qi + 1] !== t) return;
+    const deck = spareDeck(); deck.volume = 1; load(deck, s.url, s.hls);
+    Object.assign(pre, { key: k, deck, at: Date.now() });
+  } catch { pre.key = null; }
+  finally { pre.busy = false; }
+}
 
 /* ---------- учёт прослушанного (для итогов, как на iPhone) ---------- */
 const listen = { track: null, secs: 0, lastT: 0 };
@@ -35,19 +75,34 @@ function flushListen() {
 }
 
 let playToken = 0, retried = false;
+function afterStart(t) {
+  if (state.mode === 'wave') API.waveFeedback({ type: 'trackStarted', track: t }).catch(() => {});
+  if (state.mode === 'wave' && state.queue.length - state.qi <= 3) loadMoreWave();
+}
 export async function playTrack(t) {
   if (t.locked) { toast('Этот трек из Яндекс Музыки. Войдите в Яндекс на вкладке «Аккаунты»'); next(false); return; }
   const token = ++playToken;
   flushListen();
   listen.track = t; state.current = t; retried = false;
-  renderNow();
+  const old = audio;
+  // следующий трек уже загружен — переключаемся сразу
+  if (pre.key === key(t) && pre.deck && Date.now() - pre.at < 8 * 60e3) {
+    audio = pre.deck; pre.key = null; pre.deck = null;
+    audio.volume = 0;
+    const p = audio.play();
+    retire(old); renderNow();
+    try { await p; fade(audio, 1, 250); afterStart(t); return; } catch { if (token !== playToken) return; }
+  } else { dropPrefetch(); retire(old); renderNow(); }
   try {
     const s = await API.stream(t);
     if (token !== playToken) return;
-    setSource(s.url, s.hls);
+    // новый трек — на другом проигрывателе, пока прежний затихает
+    if (audio === old) audio = old === decks[0] ? decks[1] : decks[0];
+    audio.volume = 0;
+    load(audio, s.url, s.hls);
     await audio.play();
-    if (state.mode === 'wave') API.waveFeedback({ type: 'trackStarted', track: t }).catch(() => {});
-    if (state.mode === 'wave' && state.queue.length - state.qi <= 3) loadMoreWave();
+    fade(audio, 1, 250);
+    afterStart(t);
   } catch (e) {
     if (token !== playToken) return;
     toast(`Не удалось включить «${t.title}». ${e.message || ''}`.trim());
@@ -80,23 +135,27 @@ export function togglePlay() {
   if (audio.paused) audio.play().catch(() => {}); else audio.pause();
 }
 
-audio.addEventListener('ended', () => {
+onDeck('ended', () => {
   if (state.mode === 'wave' && state.current) API.waveFeedback({ type: 'trackFinished', track: state.current, played: curDur() }).catch(() => {});
   next(false);
 });
-audio.addEventListener('timeupdate', () => {
+onDeck('timeupdate', () => {
   const c = curTime(); const dt = c - listen.lastT; if (dt > 0 && dt < 2) listen.secs += dt; listen.lastT = c;
-  const d = curDur(); if (d && d - c < 60 && state.mode === 'wave' && state.qi + 1 >= state.queue.length) loadMoreWave();
+  const d = curDur();
+  // за 40 секунд до конца готовим следующий трек
+  const nk = state.queue[state.qi + 1] && key(state.queue[state.qi + 1]);
+  if (d && d - c < 40 && !pre.busy && nk && pre.key !== nk) prefetchNext();
+  if (d && d - c < 60 && state.mode === 'wave' && state.qi + 1 >= state.queue.length) loadMoreWave();
   updateTime(); syncLyrics();
 });
-for (const ev of ['play', 'pause', 'playing']) audio.addEventListener(ev, syncPlaying);
+for (const e of ['play', 'pause', 'playing']) onDeck(e, syncPlaying);
 // оборвался поток — пробуем переподключиться с того же места, потом следующий трек
-audio.addEventListener('error', async () => {
+onDeck('error', async () => {
   const t = state.current; if (!t) return;
   if (retried) { toast(`«${t.title}» не грузится, включаем следующий`); next(false); return; }
   retried = true;
   const at = curTime(), token = playToken;
-  try { const s = await API.stream(t); if (token !== playToken) return; setSource(s.url, s.hls); audio.currentTime = at; await audio.play(); } catch { if (token === playToken) next(false); }
+  try { const s = await API.stream(t); if (token !== playToken) return; load(audio, s.url, s.hls); audio.currentTime = at; audio.volume = 1; await audio.play(); } catch { if (token === playToken) next(false); }
 });
 
 /* ---------- волна ---------- */
@@ -158,7 +217,7 @@ function renderLikeState() {
 
 /* ---------- полоска «сейчас играет» внизу ---------- */
 const bar = $('#nowbar'); bar.classList.add('now');
-bar.innerHTML = `<button class="f nb-open" id="nbOpen"><div class="nb-cv" id="nbCover"><span class="eq"><i></i><i></i><i></i></span></div><div class="nb-meta"><b id="nbTitle"></b><span id="nbArtist"></span></div></button>
+bar.innerHTML = `<button class="f nb-open" id="nbOpen"><div class="nb-cv" id="nbCover"><span class="eq"><i></i><i></i><i></i></span></div><div class="nb-meta"><b id="nbTitle"></b><span id="nbArtist"></span><em>Нажмите, чтобы открыть плеер и текст</em></div></button>
   <button class="f nb-btn" id="nbPlay" aria-label="Играть или пауза"></button>
   <button class="f nb-btn" id="nbNext" aria-label="Дальше">${ico('next')}</button>
   <div class="nb-prog"><i id="nbFill"></i></div>`;
@@ -184,9 +243,10 @@ P.innerHTML = `
         <button class="f c-play" id="plPlay" aria-label="Играть или пауза" data-autofocus></button>
         <button class="f c-skip" id="plNext" aria-label="Дальше">${ico('next')}</button>
         <button class="f c-side" id="plLike" data-like-now aria-label="Нравится">${ico('heart')}</button>
-        <span class="c-gap"></span>
-        <button class="f c-side" id="plLyr" aria-label="Текст песни">${ico('lyrics')}</button>
-        <button class="f c-side" id="plWave" aria-label="Волна по треку">${ico('radio')}</button>
+      </div>
+      <div class="pl-extra" data-zone="plx" data-first>
+        <button class="f c-pill" id="plLyr">${ico('lyrics')}<span>Текст</span></button>
+        <button class="f c-pill" id="plWave">${ico('radio')}<span>Волна по треку</span></button>
       </div>
       <div class="pl-hint" id="plHint">Влево и вправо на полосе — перемотка</div>
     </div>
@@ -235,23 +295,24 @@ export function renderNow() {
   $('#nbCover').style.backgroundImage = cv;
   $('#nbTitle').textContent = t.title; $('#nbArtist').textContent = t.artist;
   $('#plCover').style.backgroundImage = big + ',' + cv;
-  $('#plBg').style.backgroundImage = cv;
-  // живой фон всего приложения — размытая обложка играющего трека
-  const amb = $('#ambient');
-  if (amb && amb.dataset.cover !== t.cover) {
-    amb.dataset.cover = t.cover || '';
-    const layer = document.createElement('i'); layer.style.backgroundImage = cv;
-    amb.appendChild(layer);
-    requestAnimationFrame(() => requestAnimationFrame(() => layer.classList.add('in')));
-    setTimeout(() => { while (amb.children.length > 1) amb.firstChild.remove(); }, 1400);
-  }
   $('#plTitle').textContent = t.title; $('#plArtist').textContent = t.artist + (SOURCE[t.source] ? '  ·  ' + SOURCE[t.source] : '');
   $('#plFrom').textContent = fromLabel();
   $('#plDislike').classList.toggle('hidden', t.source === 'local');
   renderLikeState(); syncPlaying(); updateTime();
   if (t.cover !== lastCover) {
     lastCover = t.cover;
-    API.coverColor(t.cover).then(c => { if (c && state.current === t) document.documentElement.style.setProperty('--accent', `rgb(${c.join(',')})`); }).catch(() => {});
+    API.coverColor(t.cover).then(c => {
+      if (!c || state.current !== t) return;
+      const rgb = `rgb(${c.join(',')})`;
+      document.documentElement.style.setProperty('--accent', rgb);
+      // живой фон — мягкие пятна цвета обложки, новый плавно проявляется поверх старого
+      const amb = $('#ambient'); if (!amb) return;
+      const layer = document.createElement('i');
+      layer.style.background = `radial-gradient(80rem 60rem at 75% 0%, rgba(${c.join(',')},.30), transparent 70%), radial-gradient(70rem 50rem at 10% 100%, rgba(${c.join(',')},.18), transparent 70%)`;
+      amb.appendChild(layer);
+      requestAnimationFrame(() => requestAnimationFrame(() => layer.classList.add('in')));
+      setTimeout(() => { while (amb.children.length > 1) amb.firstChild.remove(); }, 1400);
+    }).catch(() => {});
   }
   if (lyr.open) loadLyrics();
   setMediaSession(t);
@@ -278,6 +339,7 @@ const lyr = { open: false, key: null, data: undefined, idx: -1 };
 function toggleLyrics() {
   lyr.open = !lyr.open;
   $('#plLyr').classList.toggle('on', lyr.open);
+  $('#plLyr span').textContent = lyr.open ? 'Обложка' : 'Текст';
   $('#plLyrics').classList.toggle('hidden', !lyr.open);
   P.classList.toggle('with-lyrics', lyr.open);
   if (lyr.open) loadLyrics();

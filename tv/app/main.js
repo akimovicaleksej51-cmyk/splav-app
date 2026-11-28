@@ -3,7 +3,7 @@ import { startCore, override, isNative } from '../../mobile/core/entry.js';
 import { App } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
 import pkg from '../package.json';
-import { $, state, toast, move, back, onBack, focus, focusFirst, topLayer } from './lib.js';
+import { $, state, toast, move, back, onBack, focus, focusFirst, topLayer, setFast } from './lib.js';
 import { renderNow, syncPlaying, mediaKey, openPlayer, playerOpen, wake } from './player.js';
 import { showTab, refreshState, loadLikes, rerender, closeSub } from './views.js';
 import './update.js';
@@ -52,6 +52,7 @@ document.addEventListener('keydown', e => {
       if (!atEdge) return;
     }
     e.preventDefault();
+    setFast(e.repeat);
     move(dir);
     return;
   }

@@ -69,6 +69,8 @@ const candidates = () => $$('.f', root()).filter(visible);
 
 const zoneMemory = new Map();
 const zoneOf = el => el && el.closest('[data-zone]');
+let fast = false;   // стрелку держат зажатой — прокручиваем сразу, без анимации
+export function setFast(v) { fast = v; }
 export function focus(el, { scroll = true } = {}) {
   if (!el) return;
   el.focus({ preventScroll: true });
@@ -105,7 +107,7 @@ function keepInView(el) {
       if (r.left < pr.left + pad) dx = r.left - (pr.left + pad);
       else if (r.right > pr.right - pad) dx = r.right - (pr.right - pad);
     }
-    if (dy || dx) p.scrollBy({ top: dy, left: dx, behavior: 'smooth' });
+    if (dy || dx) p.scrollBy({ top: dy, left: dx, behavior: fast ? 'auto' : 'smooth' });
   }
 }
 
@@ -138,7 +140,7 @@ export function move(dir) {
   if (zTo && zTo !== zFrom) {
     const mem = zoneMemory.get(zTo.dataset.zone);
     if (mem && document.contains(mem) && visible(mem) && list.includes(mem)) best = mem;
-    else if (zTo.classList.contains('cards') && (dir === 'up' || dir === 'down')) {
+    else if ((zTo.classList.contains('cards') || zTo.hasAttribute('data-first')) && (dir === 'up' || dir === 'down')) {
       const zr = zTo.getBoundingClientRect();
       best = list.find(e => zTo.contains(e) && e.getBoundingClientRect().left >= zr.left - 2) || best;
     }
