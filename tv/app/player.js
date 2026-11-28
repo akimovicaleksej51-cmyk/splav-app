@@ -1,6 +1,7 @@
 // Воспроизведение, волна, лайки, полноэкранный плеер с текстом песни
 import Hls from 'hls.js';
 import { API } from '../../mobile/app/api.js';
+import { Native, isNative } from '../../mobile/core/native.js';
 import { $, $$, esc, fmt, cssUrl, bigCover, key, ico, toast, state, SOURCE, pushLayer, popLayer, focus, focusFirst, topLayer } from './lib.js';
 
 /* ---------- движок ----------
@@ -126,8 +127,9 @@ export async function next(userSkip = true) {
   state.qi++;
   playTrack(state.queue[state.qi]);
 }
+// «Назад» сразу включает предыдущий трек; если его нет — текущий с начала
 export function prev() {
-  if (curTime() > 3 || state.qi <= 0) { seekTo(0); return; }
+  if (state.qi <= 0) { seekTo(0); return; }
   state.qi--; playTrack(state.queue[state.qi]);
 }
 export function togglePlay() {
@@ -316,10 +318,21 @@ export function renderNow() {
   }
   if (lyr.open) loadLyrics();
   setMediaSession(t);
+  reportNow();
   document.dispatchEvent(new Event('now-changed'));
 }
+// служба Android «Сейчас играет»: держит Сплав живым в фоне и показывает карточку трека
+let lastReport = 0;
+function reportNow() {
+  const t = state.current; if (!isNative || !t) return;
+  lastReport = Date.now();
+  Native.nowPlaying({ title: t.title, artist: t.artist, cover: t.cover || null, playing: isPlaying(), position: curTime(), duration: curDur() }).catch(() => {});
+}
+setInterval(() => { if (isPlaying() && Date.now() - lastReport > 15000) reportNow(); }, 5000);
+
 export function syncPlaying() {
   const p = isPlaying();
+  reportNow();
   document.body.classList.toggle('playing', p);
   const icon = ico(p ? 'pause' : 'play');
   $('#nbPlay').innerHTML = icon; $('#plPlay').innerHTML = icon;

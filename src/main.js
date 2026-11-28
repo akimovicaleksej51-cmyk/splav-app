@@ -391,6 +391,9 @@ handle('login', async (service) => {
 handle('zvToken', async (token) => { const pr = await zvProfile(token.trim()); if (!pr || pr.anon) throw new Error('Это гостевой токен, войдите в аккаунт Звука'); config.zvToken = token.trim(); saveConfig(); return true; });
 handle('setKeys', async (k) => { for (const [a, b] of Object.entries(k)) if (b !== '••••••') config.keys[a] = String(b || '').trim(); saveConfig(); return true; });
 handle('yaToken', async (token) => { config.yaToken = token.trim(); yaUid = null; saveConfig(); await ya('/account/status'); return true; });
+// вход с телефона на телевизор: телефон отдаёт свои входы, телевизор их принимает
+handle('scToken', async (token) => { const prev = config.scToken; config.scToken = token.trim(); scUserId = null; try { await sc('/me'); } catch (e) { config.scToken = prev; throw e; } saveConfig(); return true; });
+handle('exportTokens', async () => ({ ya: config.yaToken || null, sc: config.scToken || null, zv: config.zvToken || null }));
 handle('logout', async (service) => {
   if (service === 'ya') { config.yaToken = null; yaUid = null; await session.fromPartition('persist:yandex').clearStorageData(); }
   if (service === 'sc') { config.scToken = null; scUserId = null; await session.fromPartition('persist:soundcloud').clearStorageData(); }

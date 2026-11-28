@@ -10,6 +10,7 @@ import { $, $$, ico, toast, esc, state, showTab, haptic } from './lib.js';
 import { refreshState, loadLikes, renderWave, rerenderAll } from './views.js';
 import { renderNow, syncPlaying } from './player.js';
 import { roomJoin, socialInit } from './together.js';
+import { tvLogin } from './tvlogin.js';
 
 /* ---------- подмены обработчиков, которым на телефоне нужна своя реализация ---------- */
 // цвет обложки для фона плеера: считаем по картинке на холсте
@@ -127,7 +128,9 @@ $$('.tb').forEach(b => b.onclick = () => { haptic(); showTab(b.dataset.tab); });
     const was = localStorage.getItem('splav.updatedTo');
     if (was && was === pkg.version) { localStorage.removeItem('splav.updatedTo'); setTimeout(() => toast(`Сплав обновился до версии ${pkg.version}`), 1500); }
     StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
-    App.addListener('appUrlOpen', ({ url }) => { const m = /^splavapp:\/\/(?:room|join)\/(\d{6})/.exec(url || ''); if (m) { showTab('together'); roomJoin(m[1]); } });
+    App.addListener('appUrlOpen', ({ url }) => { if (tvLogin(url)) return; const m = /^splavapp:\/\/(?:room|join)\/(\d{6})/.exec(url || ''); if (m) { showTab('together'); roomJoin(m[1]); } });
+    // открыли Сплав QR-кодом с телевизора, когда он не был запущен
+    App.getLaunchUrl().then(r => { if (r && r.url) tvLogin(r.url); }).catch(() => {});
   }
   renderWave(); renderNow(); syncPlaying();
   try { await startCore(); await refreshState(); } catch (e) { toast(e.message); }
