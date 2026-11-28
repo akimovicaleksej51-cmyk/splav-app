@@ -26,6 +26,7 @@ export const API = {
   playlistDelete: id => call('playlistDelete', id),
   importPlaylist: l => call('importPlaylist', l),
   historyAdd: e => call('historyAdd', e),
+  historyStats: () => call('historyStats'),
   wrapped: ym => call('wrapped', ym),
   discover: o => call('discover', o),
   setPrefs: p => call('setPrefs', p),

@@ -29,3 +29,10 @@ export async function open(track, key) {
   const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64u(iv) }, await aes(unb64u(key), 'decrypt'), unb64u(data));
   return JSON.parse(new TextDecoder().decode(plain));
 }
+
+// пульт: телевизор ждёт в своей временной комнате, телефон сообщает ему код комнаты, которую ведёт сам
+export const remoteUrl = (code, hostKey) => `splavapp://remote/${code}?h=${encodeURIComponent(hostKey)}`;
+export function parseRemote(url) {
+  const m = /^splavapp:\/\/remote\/(\d{6})\?h=([^#&]+)$/.exec(url || '');
+  return m ? { code: m[1], hostKey: decodeURIComponent(m[2]) } : null;
+}

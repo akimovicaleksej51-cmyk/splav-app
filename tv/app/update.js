@@ -11,15 +11,18 @@ const cmpVer = (a, b) => { const x = String(a).split('.').map(Number), y = Strin
 export async function checkUpdates(manual = false) {
   upd.checkedAt = Date.now();
   try {
-    const list = await (await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=30`, { headers: { Accept: 'application/vnd.github+json' } })).json();
-    const rel = (Array.isArray(list) ? list : []).filter(r => !r.draft && /^tv-v\d/.test(r.tag_name)).sort((a, b) => cmpVer(b.tag_name.slice(4), a.tag_name.slice(4)))[0];
+    const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=30`, { headers: { Accept: 'application/vnd.github+json' } });
+    const list = await res.json();
+    // GitHub не ответил списком (нет сети, лимит запросов) — так и говорим, а не «у вас последняя версия»
+    if (!res.ok || !Array.isArray(list)) throw new Error(res.status === 403 ? 'GitHub просит подождать, попробуйте через час' : 'GitHub не ответил');
+    const rel = list.filter(r => !r.draft && /^tv-v\d/.test(r.tag_name)).sort((a, b) => cmpVer(b.tag_name.slice(4), a.tag_name.slice(4)))[0];
     const asset = rel && (rel.assets || []).find(a => /\.apk$/i.test(a.name));
     if (rel && asset && cmpVer(rel.tag_name.slice(4), pkg.version) > 0) {
       const fresh = upd.version !== rel.tag_name.slice(4);
       upd.version = rel.tag_name.slice(4); upd.url = asset.browser_download_url;
       if (fresh) { toast(`Вышел Сплав ${upd.version}. Нажмите «Обновить» на главной`); document.dispatchEvent(new Event('update-ready')); }
     } else if (manual) toast(`У вас последняя версия, ${pkg.version}`);
-  } catch { if (manual) toast('Не удалось проверить обновления. Проверьте интернет'); }
+  } catch (e) { if (manual) toast('Не удалось проверить обновления: ' + (e.message || 'нет связи')); }
 }
 
 export async function installUpdate() {

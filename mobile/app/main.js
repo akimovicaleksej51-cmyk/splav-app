@@ -10,7 +10,7 @@ import { $, $$, ico, toast, esc, state, showTab, haptic } from './lib.js';
 import { refreshState, loadLikes, renderWave, rerenderAll } from './views.js';
 import { renderNow, syncPlaying } from './player.js';
 import { roomJoin, socialInit } from './together.js';
-import { tvLogin } from './tvlogin.js';
+import { tvLogin, tvRemote } from './tvlogin.js';
 
 /* ---------- подмены обработчиков, которым на телефоне нужна своя реализация ---------- */
 // цвет обложки для фона плеера: считаем по картинке на холсте
@@ -99,22 +99,33 @@ export async function checkUpdates(manual) {
     const src = await (await fetch(fresh(SOURCE_URL))).json();
     const app = (src.apps || [])[0] || {};
     const v = (app.versions && app.versions[0]) || app;
-    if (v.version && cmpVer(v.version, await builtin()) > 0) { upd = { version: v.version }; renderUpdateEverywhere(); if (manual) toast('Нужно обновить Сплав в SideStore'); }
+    if (v.version && cmpVer(v.version, await builtin()) > 0) { upd = { version: v.version }; renderUpdateEverywhere(); if (manual) toast('Вышла новая основа Сплава: переустановите его через Sideloadly'); }
     else if (manual) toast('У вас последняя версия');
   } catch { if (manual) toast('Не удалось проверить обновления'); }
 }
+// подпись бесплатного аккаунта Apple живёт 7 дней: заранее напоминаем продлить
+let sign = null;
+async function checkSign() {
+  if (!isNative) return;
+  try {
+    const r = await Native.signInfo();
+    if (r && r.expires) { const days = (r.expires - Date.now()) / 864e5; sign = days < 2.5 ? { days } : null; renderUpdateEverywhere(); }
+  } catch {}   // старая основа не умеет читать подпись — просто молчим
+}
+const INSTALL_URL = 'https://github.com/akimovicaleksej51-cmyk/splav-app/blob/main/mobile/INSTALL.md';
 export function renderUpdate(box) {
   if (!box) return;
-  box.innerHTML = upd ? `<div class="upd"><span>Версия ${esc(upd.version)} — обновите в SideStore</span><button class="btn sm primary" data-upd>Открыть</button></div>` : '';
+  const left = sign && (sign.days <= 0.5 ? 'сегодня' : sign.days < 1.5 ? 'завтра' : 'через 2 дня');
+  box.innerHTML = sign ? `<div class="upd"><span>Подпись Сплава истекает ${left}. Продлите её в Sideloadly, иначе приложение перестанет открываться</span><button class="btn sm primary" data-upd>Как</button></div>`
+    : upd ? `<div class="upd"><span>Новая основа Сплава ${esc(upd.version)}: переустановите его через Sideloadly</span><button class="btn sm primary" data-upd>Как</button></div>` : '';
 }
 function renderUpdateEverywhere() { const bar = $('#updWave'); if (bar) renderUpdate(bar); }
-async function openSideStore() {
+async function openInstallGuide() {
   haptic();
-  const url = 'sidestore://source?url=' + encodeURIComponent(SOURCE_URL);
-  if (isNative) { try { await Native.openUrl({ url }); return; } catch {} }
-  toast('Откройте SideStore и нажмите «Обновить» рядом со Сплавом');
+  if (isNative) { try { await Native.openUrl({ url: INSTALL_URL }); return; } catch {} }
+  window.open(INSTALL_URL, '_blank');
 }
-document.addEventListener('click', e => { if (e.target.closest('[data-upd]')) openSideStore(); });
+document.addEventListener('click', e => { if (e.target.closest('[data-upd]')) openInstallGuide(); });
 export const versionLabel = async () => { const n = await builtin(); return n === pkg.version ? pkg.version : `${pkg.version} (основа ${n})`; };
 
 /* ---------- запуск ---------- */
@@ -128,9 +139,9 @@ $$('.tb').forEach(b => b.onclick = () => { haptic(); showTab(b.dataset.tab); });
     const was = localStorage.getItem('splav.updatedTo');
     if (was && was === pkg.version) { localStorage.removeItem('splav.updatedTo'); setTimeout(() => toast(`Сплав обновился до версии ${pkg.version}`), 1500); }
     StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
-    App.addListener('appUrlOpen', ({ url }) => { if (tvLogin(url)) return; const m = /^splavapp:\/\/(?:room|join)\/(\d{6})/.exec(url || ''); if (m) { showTab('together'); roomJoin(m[1]); } });
+    App.addListener('appUrlOpen', ({ url }) => { if (tvLogin(url) || tvRemote(url)) return; const m = /^splavapp:\/\/(?:room|join)\/(\d{6})/.exec(url || ''); if (m) { showTab('together'); roomJoin(m[1]); } });
     // открыли Сплав QR-кодом с телевизора, когда он не был запущен
-    App.getLaunchUrl().then(r => { if (r && r.url) tvLogin(r.url); }).catch(() => {});
+    App.getLaunchUrl().then(r => { if (r && r.url && !tvLogin(r.url)) tvRemote(r.url); }).catch(() => {});
   }
   renderWave(); renderNow(); syncPlaying();
   try { await startCore(); await refreshState(); } catch (e) { toast(e.message); }
@@ -139,6 +150,7 @@ $$('.tb').forEach(b => b.onclick = () => { haptic(); showTab(b.dataset.tab); });
   loadLikes();
   socialInit();
   setTimeout(() => checkUpdates(false), 3000);
+  setTimeout(checkSign, 4000);
   // при возвращении в приложение: если музыка не играет — включаем скачанное, и раз в час проверяем новое
   let lastChk = Date.now();
   document.addEventListener('visibilitychange', async () => {

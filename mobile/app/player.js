@@ -10,6 +10,8 @@ const mkDeck = () => { const a = new Audio(); a.preload = 'auto'; a.setAttribute
 const decks = [mkDeck(), mkDeck()];
 export let audio = decks[0];
 const spareDeck = () => (decks[0] === audio ? decks[1] : decks[0]);
+// режим пульта: телефон ведёт комнату, а звук играет на телевизоре
+export function setMuted(on) { decks.forEach(d => { d.muted = on; }); }
 const onDeck = (ev, fn) => decks.forEach(d => d.addEventListener(ev, e => { if (d === audio) fn(e); }));
 // пауза, которую поставил человек (или комната), — её не надо «чинить» после звонка
 let userPaused = false, sysPausedAt = 0;

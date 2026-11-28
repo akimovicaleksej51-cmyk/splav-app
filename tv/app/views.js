@@ -1,12 +1,13 @@
 // Экраны телевизора: Главная (волна, чарт, новинки, жанры), Чарт, Моя музыка, Поиск, Аккаунты, альбомы
 import { API } from '../../mobile/app/api.js';
-import { $, $$, esc, cssUrl, bigCover, key, ico, toast, state, plural, SOURCE, focus, focusFirst, remember, menu } from './lib.js';
+import { $, $$, esc, cssUrl, bigCover, key, ico, toast, state, plural, SOURCE, focus, focusFirst, remember, menu, ask } from './lib.js';
 import { updateBanner, checkUpdates, VERSION } from './update.js';
 import { openPhoneLogin } from './phonelogin.js';
+import { renderTogether } from './room.js';
 import { playQueue, startWave, togglePlay, next, prev, toggleLike, dislike, openPlayer, isPlaying, effectiveWave } from './player.js';
 
 /* ---------- боковое меню ---------- */
-const TABS = [['wave', 'wave', 'Главная'], ['chart', 'chart', 'Чарт'], ['library', 'heart', 'Моя музыка'], ['search', 'search', 'Поиск'], ['accounts', 'user', 'Аккаунты']];
+const TABS = [['wave', 'wave', 'Главная'], ['chart', 'chart', 'Чарт'], ['library', 'heart', 'Моя музыка'], ['search', 'search', 'Поиск'], ['together', 'people', 'Вместе'], ['accounts', 'user', 'Аккаунты']];
 $('#side').innerHTML = `<div class="logo"><i></i><span>СПЛАВ</span></div>${TABS.map(([k, i, n]) => `<button class="f tab" data-tab="${k}">${ico(i)}<span>${n}</span></button>`).join('')}`;
 $$('#side .tab').forEach(b => {
   b.onclick = () => { showTab(b.dataset.tab); focusFirst($('#main')); };
@@ -71,8 +72,20 @@ export function trackMenu(t) {
   menu(`${t.title} — ${t.artist}`, [
     ['radio', 'Волна по этому треку', () => startWave({ type: 'track', source: t.source, id: t.rawId, title: t.title, artist: (t.artist || '').split(',')[0].trim(), genre: t._genre || '', label: `по треку «${t.title}»` })],
     ['queue', 'Сыграть следующим', () => { state.queue.splice(state.qi + 1, 0, t); if (state.qi < 0) playQueue([t], 0); else toast('Сыграет следующим'); }],
+    ['plus', 'Добавить в плейлист', () => addToPlaylist(t)],
     [state.liked.has(key(t)) ? 'close' : 'heart', state.liked.has(key(t)) ? 'Убрать из «Моей музыки»' : 'Добавить в «Мою музыку»', () => toggleLike(t)],
     ['ban', 'Не рекомендовать', () => dislike(t)],
+  ]);
+}
+async function addToPlaylist(t) {
+  const lists = await API.playlists().catch(() => []);
+  const put = async pl => {
+    if ((pl.tracks || []).some(x => key(x) === key(t))) { toast(`Уже есть в «${pl.name}»`); return; }
+    await API.playlistSave({ ...pl, tracks: [...(pl.tracks || []), t] }); toast(`Добавлено в «${pl.name}»`);
+  };
+  menu('Добавить в плейлист', [
+    ['plus', 'Новый плейлист', async () => { const name = await ask('Название плейлиста', { placeholder: 'Например, «Вечер»', ok: 'Создать' }); if (name) put({ name, tracks: [] }); }],
+    ...lists.slice(0, 12).map(pl => ['list', pl.name, () => put(pl)]),
   ]);
 }
 // подсветка играющего трека в списках и карточках
@@ -217,30 +230,109 @@ export async function openAlbum(source, id, hint = {}) {
 }
 
 /* ================= МОЯ МУЗЫКА ================= */
-const lib = { f: 'all' };
+const lib = { sec: 'likes', f: 'all' };
+const SECTIONS = [['likes', 'Лайки'], ['recent', 'Недавнее'], ['playlists', 'Плейлисты'], ['artists', 'Артисты']];
 const libList = () => {
   const L = state.likes;
   if (lib.f !== 'all') return L[lib.f] || [];
   return [...L.ya, ...L.zv, ...L.sc, ...L.guest];
 };
-renderers.library = () => {
+// артисты из лайков и истории: чем чаще слушаете, тем выше; обложка — от любимого трека
+function myArtists(recent) {
+  const cnt = new Map();
+  const add = (t, w) => {
+    const a = t && t.artists && t.artists[0]; if (!a || !a.name) return;
+    const k = (a.source || '') + ':' + (a.id || a.name);
+    const c = cnt.get(k) || { source: a.source, id: a.id != null ? String(a.id) : null, name: a.name, cover: t.cover, n: 0 };
+    c.n += w; cnt.set(k, c);
+  };
+  for (const t of libList()) add(t, 1);
+  for (const r of recent) add(r.t, Math.min(r.plays, 5));
+  return [...cnt.values()].sort((a, b) => b.n - a.n).slice(0, 30);
+}
+const libHead = (count) => `<div class="page-head"><h1>Моя музыка</h1>${count ? `<span>${count}</span>` : ''}</div>
+  <div class="chips" data-zone="libsec">${SECTIONS.map(([k, n]) => `<button class="f chip big${lib.sec === k ? ' active' : ''}" data-sec="${k}">${n}</button>`).join('')}</div>`;
+renderers.library = async () => {
   const el = $('#main');
-  const L = state.likes;
-  const filters = [['all', 'Все'], ['ya', 'Яндекс', L.ya.length], ['zv', 'Звук', L.zv.length], ['sc', 'SoundCloud', L.sc.length], ['guest', 'Без входа', L.guest.length]].filter(f => f[0] === 'all' || f[2]);
-  const list = libList();
-  el.innerHTML = `<div class="page-head"><h1>Моя музыка</h1><span>${plural(list.length, 'трек', 'трека', 'треков')}</span></div>
-    <div class="chips" data-zone="libtop">
-      <button class="f btn primary" id="lPlay" data-autofocus>${ico('play')}<span>Слушать</span></button>
-      <button class="f btn" id="lShuf">${ico('shuffle')}<span>Вперемешку</span></button>
-      <span class="chips-gap"></span>
-      ${filters.length > 2 ? filters.map(([k, n]) => `<button class="f chip${lib.f === k ? ' active' : ''}" data-f="${k}">${n}</button>`).join('') : ''}
-    </div>
-    <div class="list" data-zone="list" id="lList"></div>`;
-  renderList($('#lList'), list, { onPlay: i => playQueue(list, i, 'list', 'Моя музыка'), empty: state.guest ? '<b>Здесь будут ваши лайки</b>Нажмите на сердце в плеере или войдите в Яндекс, Звук или SoundCloud на вкладке «Аккаунты»' : '<b>Пока пусто</b>Лайкайте треки, и они появятся здесь' });
-  $('#lPlay').onclick = () => { if (list.length) { playQueue(list, 0, 'list', 'Моя музыка'); openPlayer(); } };
-  $('#lShuf').onclick = () => { if (!list.length) return; const s = [...list].sort(() => Math.random() - 0.5); playQueue(s, 0, 'list', 'Моя музыка'); openPlayer(); };
-  $$('[data-f]', el).forEach(b => b.onclick = () => { lib.f = b.dataset.f; renderers.library(); focus($(`[data-f="${lib.f}"]`)); });
+  const sec = lib.sec;
+  const bindSec = () => $$('[data-sec]', el).forEach(b => b.onclick = () => { lib.sec = b.dataset.sec; renderers.library(); focus($(`[data-sec="${lib.sec}"]`)); });
+  if (sec === 'likes') {
+    const L = state.likes;
+    const filters = [['all', 'Все'], ['ya', 'Яндекс', L.ya.length], ['zv', 'Звук', L.zv.length], ['sc', 'SoundCloud', L.sc.length], ['guest', 'Без входа', L.guest.length]].filter(f => f[0] === 'all' || f[2]);
+    const list = libList();
+    el.innerHTML = `${libHead(plural(list.length, 'трек', 'трека', 'треков'))}
+      <div class="chips" data-zone="libtop">
+        <button class="f btn primary" id="lPlay">${ico('play')}<span>Слушать</span></button>
+        <button class="f btn" id="lShuf">${ico('shuffle')}<span>Вперемешку</span></button>
+        <span class="chips-gap"></span>
+        ${filters.length > 2 ? filters.map(([k, n]) => `<button class="f chip${lib.f === k ? ' active' : ''}" data-f="${k}">${n}</button>`).join('') : ''}
+      </div>
+      <div class="list" data-zone="list" id="lList"></div>`;
+    bindSec();
+    renderList($('#lList'), list, { onPlay: i => playQueue(list, i, 'list', 'Моя музыка'), empty: state.guest ? '<b>Здесь будут ваши лайки</b>Нажмите на сердце в плеере или войдите в Яндекс, Звук или SoundCloud на вкладке «Аккаунты»' : '<b>Пока пусто</b>Лайкайте треки, и они появятся здесь' });
+    $('#lPlay').onclick = () => { if (list.length) { playQueue(list, 0, 'list', 'Моя музыка'); openPlayer(); } };
+    $('#lShuf').onclick = () => { if (!list.length) return; const s = [...list].sort(() => Math.random() - 0.5); playQueue(s, 0, 'list', 'Моя музыка'); openPlayer(); };
+    $$('[data-f]', el).forEach(b => b.onclick = () => { lib.f = b.dataset.f; renderers.library(); focus($(`[data-f="${lib.f}"]`)); });
+    return;
+  }
+  el.innerHTML = `${libHead('')}<div id="lBody"><div class="empty">Загружаем…</div></div>`;
+  bindSec();
+  if (sec === 'recent' || sec === 'artists') {
+    const stats = await API.historyStats().catch(() => []);
+    if (state.tab !== 'library' || lib.sec !== sec || sub) return;
+    const recent = stats.filter(x => x.t).sort((a, b) => b.last - a.last);
+    if (sec === 'recent') {
+      const list = recent.slice(0, 150).map(x => x.t);
+      $('#lBody').innerHTML = `<div class="chips" data-zone="rctop"><button class="f btn primary" id="rPlay">${ico('play')}<span>Слушать</span></button></div><div class="list" data-zone="list" id="rList"></div>`;
+      renderList($('#rList'), list, { onPlay: i => playQueue(list, i, 'list', 'Недавнее'), empty: '<b>Пока пусто</b>Здесь появятся треки, которые вы слушали на телевизоре' });
+      $('#rPlay').onclick = () => { if (list.length) { playQueue(list, 0, 'list', 'Недавнее'); openPlayer(); } };
+    } else {
+      const arts = myArtists(recent);
+      $('#lBody').innerHTML = arts.length ? `<div class="art-grid" data-zone="arts">${arts.map((a, i) => `<button class="f artist" data-ar="${i}"><div class="a-img" style="background-image:${esc(cssUrl(a.cover))}"></div><span>${esc(a.name)}</span></button>`).join('')}</div>`
+        : '<div class="empty"><b>Пока пусто</b>Артисты появятся, когда вы полайкаете или послушаете треки</div>';
+      $$('[data-ar]', el).forEach(b => b.onclick = () => artistMenu(arts[+b.dataset.ar]));
+    }
+    return;
+  }
+  // плейлисты
+  const lists = await API.playlists().catch(() => []);
+  if (state.tab !== 'library' || lib.sec !== 'playlists' || sub) return;
+  const cover = pl => pl.cover || ((pl.tracks || []).find(t => t.cover) || {}).cover;
+  $('#lBody').innerHTML = `<div class="pl-grid" data-zone="pls">
+      <button class="f tcard pl-new" id="plNew"><i class="tc-cv">${ico('plus')}</i><b>Новый плейлист</b><small>Добавляйте треки через меню ((•))</small></button>
+      ${lists.map((pl, i) => `<button class="f tcard" data-pl="${i}"><i class="tc-cv" style="background-image:${esc(cssUrl(cover(pl)))}"></i><b>${esc(pl.name)}</b><small>${plural((pl.tracks || []).length, 'трек', 'трека', 'треков')}</small></button>`).join('')}
+    </div>${lists.length ? '' : '<div class="note">Плейлисты хранятся на телевизоре. Чтобы добавить трек, наведитесь на кнопку ((•)) справа от него и выберите «Добавить в плейлист».</div>'}`;
+  $('#plNew').onclick = async () => { const name = await ask('Название плейлиста', { placeholder: 'Например, «Вечер»', ok: 'Создать' }); if (!name) return; await API.playlistSave({ name, tracks: [] }); toast(`Плейлист «${name}» создан`); renderers.library(); };
+  $$('[data-pl]', el).forEach(b => b.onclick = () => { subReturn = `[data-pl="${b.dataset.pl}"]`; openPlaylist(lists[+b.dataset.pl]); });
 };
+function artistMenu(a) {
+  const items = [];
+  if (a.id && ['ya', 'sc'].includes(a.source)) items.push(['play', 'Популярные треки', async () => {
+    toast(`Включаем ${a.name}…`);
+    try { const d = await API.artist(a.source, a.id); const l = d.popular || []; if (l.length) { playQueue(l, 0, 'list', a.name); openPlayer(); } else toast('У артиста нет доступных треков'); } catch (e) { toast(e.message); }
+  }]);
+  items.push(['radio', 'Волна по артисту', () => startWave(a.id && ['ya', 'sc', 'au', 'ja'].includes(a.source)
+    ? { type: 'artist', source: a.source, id: a.id, artist: a.name, label: `по артисту ${a.name}` }
+    : { type: 'artist', source: 'none', id: null, artist: a.name, label: `по артисту ${a.name}` })]);
+  menu(a.name, items);
+}
+function openPlaylist(pl) {
+  const draw = () => {
+    const el = $('#main'); el.scrollTop = 0;
+    const list = pl.tracks || [];
+    const cv = pl.cover || (list.find(t => t.cover) || {}).cover;
+    el.innerHTML = `<section class="al-head" data-zone="alhead"><div class="al-cv" style="background-image:${esc(cssUrl(bigCover(cv)))}"></div>
+      <div class="al-info"><div class="h-kicker">Плейлист</div><div class="al-title">${esc(pl.name)}</div><div class="h-sub">${plural(list.length, 'трек', 'трека', 'треков')}</div>
+      <div class="h-ctrl"><button class="f btn primary big" id="alPlay" data-autofocus>${ico('play')}<span>Слушать</span></button><button class="f btn" id="alShuf">${ico('shuffle')}<span>Вперемешку</span></button><button class="f btn round" id="plDel" aria-label="Удалить плейлист">${ico('trash')}</button></div></div></section>
+      <div class="list" data-zone="list" id="alList"></div>`;
+    renderList($('#alList'), list, { onPlay: i => playQueue(list, i, 'list', pl.name), empty: 'В плейлисте пока нет треков' });
+    $('#alPlay').onclick = () => { if (list.length) { playQueue(list, 0, 'list', pl.name); openPlayer(); } };
+    $('#alShuf').onclick = () => { if (list.length) { playQueue([...list].sort(() => Math.random() - 0.5), 0, 'list', pl.name); openPlayer(); } };
+    $('#plDel').onclick = () => menu(`Удалить «${pl.name}»?`, [['close', 'Да, удалить', async () => { await API.playlistDelete(pl.id); toast('Плейлист удалён'); subReturn = null; closeSub(); }]]);
+    focus($('#alPlay'));
+  };
+  sub = draw; draw();
+}
 document.addEventListener('likes-changed', () => { if (state.tab === 'library' && !sub && !$('#main').contains(document.activeElement)) renderers.library(); });
 export async function loadLikes() {
   try {
@@ -291,6 +383,19 @@ function renderSearchRes() {
     try { const d = await API.artist(a.source, a.id); const l = d.popular || []; if (l.length) { playQueue(l, 0, 'list', a.name); openPlayer(); } else toast('У артиста нет доступных треков'); } catch (e) { toast(e.message); }
   });
 }
+
+/* ================= ВМЕСТЕ ================= */
+renderers.together = () => renderTogether($('#main'));
+// экран «Вместе» обновляется сам; фокус остаётся на той же кнопке
+function refreshTogether() {
+  if (state.tab !== 'together' || sub) return;
+  const a = document.activeElement, id = a && $('#main').contains(a) ? a.id : null;
+  if (a && a.tagName === 'INPUT') return;   // не мешаем набирать код
+  renderers.together();
+  if (id) { const el = document.getElementById(id); if (el) focus(el); else focusFirst($('#main')); }
+}
+document.addEventListener('room-changed', refreshTogether);
+document.addEventListener('now-changed', () => { if (state.roomRole === 'guest') refreshTogether(); });
 
 /* ================= АККАУНТЫ ================= */
 const SERVICES = [

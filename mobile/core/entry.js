@@ -8,8 +8,14 @@ const origFetch = window.fetch.bind(window);
 window.fetch = (r, o) => origFetch(r instanceof URL ? r.href : r, o);
 
 let ready;
+// подмены запоминаем: ядро при запуске регистрирует свои обработчики и затёрло бы их
+const overrides = new Map();
+const wrap = fn => async (_e, ...a) => { try { return { ok: true, data: await fn(...a) }; } catch (e) { return { ok: false, error: String(e.message || e) }; } };
 export function startCore() {
-  ready ||= (async () => { await hydrate(); require('../../src/main.js'); await new Promise(r => setTimeout(r, 0)); })();
+  ready ||= (async () => {
+    await hydrate(); require('../../src/main.js'); await new Promise(r => setTimeout(r, 0));
+    for (const [name, fn] of overrides) handlers.set(name, wrap(fn));
+  })();
   return ready;
 }
 export async function call(name, ...args) {
@@ -21,6 +27,7 @@ export async function call(name, ...args) {
   return r.data;
 }
 export function override(name, fn) {
-  handlers.set(name, async (_e, ...a) => { try { return { ok: true, data: await fn(...a) }; } catch (e) { return { ok: false, error: String(e.message || e) }; } });
+  overrides.set(name, fn);
+  handlers.set(name, wrap(fn));
 }
 export { Native, isNative };

@@ -2,7 +2,7 @@
 // и Сплав передаёт на телевизор свои входы в Яндекс, SoundCloud и Звук (в зашифрованном виде)
 import { call } from '../core/entry.js';
 import { API } from './api.js';
-import { parseLink, seal } from '../core/tvlink.js';
+import { parseLink, parseRemote, seal } from '../core/tvlink.js';
 import { actions, toast, haptic } from './lib.js';
 
 const NAMES = { ya: 'Яндекс', sc: 'SoundCloud', zv: 'Звук' };
@@ -32,4 +32,16 @@ async function send(link) {
   } catch (e) {
     toast(/хозяин|Комнаты/.test(e.message) ? 'Код на телевизоре устарел. Откройте его заново' : 'Не получилось: ' + e.message);
   }
+}
+
+// QR «Пульт с телефона» на телевизоре
+export function tvRemote(url) {
+  const link = parseRemote(url);
+  if (!link) return false;
+  if (url === lastUrl && Date.now() - lastAt < 10000) return true;
+  lastUrl = url; lastAt = Date.now();
+  actions('<div class="sh-head"><div class="sh-t"><b>Управлять телевизором?</b><span>Выбирайте музыку на телефоне — играть она будет на телевизоре</span></div></div>', [
+    ['people', 'Подключить телевизор', async () => { const { remoteConnect } = await import('./together.js'); remoteConnect(link); }],
+  ]);
+  return true;
 }
