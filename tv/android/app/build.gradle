@@ -1,7 +1,9 @@
 apply plugin: 'com.android.application'
 
-// версия берётся из tv/package.json, номер сборки — из GitHub Actions
+// версия берётся из tv/package.json; номер сборки считается из неё (1.0.1 → 10001),
+// чтобы каждая новая версия ставилась поверх прежней
 def tvPkg = new groovy.json.JsonSlurper().parse(file('../../package.json'))
+def tvCode = tvPkg.version.tokenize('.').collect { it as int }.with { it[0] * 10000 + it[1] * 100 + it[2] }
 
 android {
     namespace = "com.splav.tv"
@@ -10,7 +12,7 @@ android {
         applicationId "com.splav.tv"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode Integer.parseInt(System.getenv('SPLAV_BUILD_NUMBER') ?: '1')
+        versionCode tvCode
         versionName tvPkg.version
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

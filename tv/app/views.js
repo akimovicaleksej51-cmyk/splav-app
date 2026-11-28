@@ -1,6 +1,7 @@
 // Экраны телевизора: Главная (волна, чарт, новинки, жанры), Чарт, Моя музыка, Поиск, Аккаунты, альбомы
 import { API } from '../../mobile/app/api.js';
 import { $, $$, esc, cssUrl, bigCover, key, ico, toast, state, plural, SOURCE, focus, focusFirst, remember, menu } from './lib.js';
+import { updateBanner, checkUpdates, VERSION } from './update.js';
 import { playQueue, startWave, togglePlay, next, toggleLike, dislike, openPlayer, isPlaying, effectiveWave } from './player.js';
 
 /* ---------- боковое меню ---------- */
@@ -96,6 +97,7 @@ const GENRES = [['rap', 'Рэп'], ['phonk', 'Фонк'], ['pop', 'Поп'], ['i
 renderers.wave = () => {
   const el = $('#main');
   el.innerHTML = `
+    <div data-upd-box>${updateBanner()}</div>
     <section class="hero" data-zone="hero">
       <div class="h-art" id="hArt"><div class="orb"><i></i><i></i><i></i></div><div class="h-cv" id="hCv"></div></div>
       <div class="h-info">
@@ -305,19 +307,20 @@ export async function refreshState() {
 renderers.accounts = () => {
   const el = $('#main'), A = state.accounts;
   el.innerHTML = `<div class="page-head"><h1>Аккаунты</h1></div>
+    <div data-upd-box>${updateBanner()}</div>
     <div class="accs" data-zone="accs">${SERVICES.map(([k, name, logo, bg, fg, hint]) => `<div class="acc">
       <div class="acc-logo" style="background:${bg};color:${fg}">${logo}</div>
       <div class="acc-t"><b>${name}</b>${A[k] ? `<span class="ok">Подключено${A[k].name ? ': ' + esc(A[k].name) : ''}${A[k].offline ? ' (нет связи)' : ''}</span>` : `<span>${hint}</span>`}</div>
       ${A[k] ? `<button class="f btn" data-out="${k}">${ico('logout')}<span>Выйти</span></button>` : `<button class="f btn primary" data-in="${k}">Войти</button>`}</div>`).join('')}</div>
     <div class="note">Вход открывается в окне браузера. Буквы набираются экранной клавиатурой пульта, кнопка «Назад» закрывает окно.</div>
-    <div class="about" data-zone="about"><button class="f btn" id="aRefresh">${ico('refresh')}<span>Обновить музыку и чарт</span></button><span id="aVer"></span></div>`;
+    <div class="about" data-zone="about"><button class="f btn" id="aRefresh">${ico('refresh')}<span>Обновить музыку и чарт</span></button><button class="f btn" id="aUpd">Проверить новую версию</button><span>Сплав для ТВ ${VERSION}</span></div>`;
   $$('[data-in]', el).forEach(b => b.onclick = () => login(b.dataset.in));
   $$('[data-out]', el).forEach(b => b.onclick = async () => {
     const k = b.dataset.out;
     try { await API.logout(k); toast('Вы вышли'); await afterAccountChange(); } catch (e) { toast(e.message); }
   });
   $('#aRefresh').onclick = async () => { toast('Обновляем…'); resetDiscover(); await Promise.all([loadLikes(), API.discover({ artists: [], force: true }).then(d => { disc.data = d; }).catch(() => {})]); toast('Готово'); };
-  import('./main.js').then(m => { $('#aVer').textContent = 'Сплав для ТВ ' + m.VERSION; }).catch(() => {});
+  $('#aUpd').onclick = () => { toast('Проверяем…'); checkUpdates(true); };
 };
 async function afterAccountChange() {
   resetDiscover();

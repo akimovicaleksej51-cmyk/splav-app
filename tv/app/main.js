@@ -6,9 +6,8 @@ import pkg from '../package.json';
 import { $, state, toast, move, back, onBack, focus, focusFirst, topLayer } from './lib.js';
 import { renderNow, syncPlaying, mediaKey, openPlayer, playerOpen, wake } from './player.js';
 import { showTab, refreshState, loadLikes, rerender, closeSub } from './views.js';
+import './update.js';
 
-export const VERSION = pkg.version;
-const REPO = 'akimovicaleksej51-cmyk/splav-app';
 
 /* ---------- подмены обработчиков ядра ----------
    Ядро при запуске регистрирует свои обработчики, поэтому подменяем их после startCore */
@@ -71,16 +70,6 @@ function handleBack() {
 }
 onBack(() => false);
 
-/* ---------- обновления: новая версия выходит релизом tv-vX.Y.Z на GitHub ---------- */
-const cmpVer = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0); return 0; };
-async function checkUpdates() {
-  try {
-    const list = await (await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=30`, { headers: { Accept: 'application/vnd.github+json' } })).json();
-    const rel = (list || []).filter(r => !r.draft && /^tv-v\d/.test(r.tag_name)).sort((a, b) => cmpVer(b.tag_name.slice(4), a.tag_name.slice(4)))[0];
-    if (rel && cmpVer(rel.tag_name.slice(4), pkg.version) > 0) toast(`Вышел Сплав для ТВ ${rel.tag_name.slice(4)}. Скачайте новый APK со страницы релизов на GitHub`);
-  } catch {}
-}
-
 /* ---------- запуск ---------- */
 (async function init() {
   if (isNative) App.addListener('backButton', handleBack);
@@ -96,5 +85,4 @@ async function checkUpdates() {
   }
   if (isNative) SplashScreen.hide().catch(() => {});
   loadLikes();
-  setTimeout(checkUpdates, 8000);
 })();

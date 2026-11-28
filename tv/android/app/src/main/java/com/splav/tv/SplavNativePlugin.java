@@ -75,7 +75,7 @@ public class SplavNativePlugin extends Plugin {
             t.setTypeface(Typeface.DEFAULT_BOLD);
             head.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
             TextView hint = new TextView(getActivity());
-            hint.setText("Кнопка «Назад» на пульте закрывает окно");
+            hint.setText("Стрелки двигают курсор · ОК — нажать · «Назад» — закрыть");
             hint.setTextColor(Color.parseColor("#8A8894"));
             hint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
             head.addView(hint);
@@ -99,7 +99,12 @@ public class SplavNativePlugin extends Plugin {
                 @Override public void onPageFinished(WebView view, String u) { nav(u); }
                 @Override public void doUpdateVisitedHistory(WebView view, String u, boolean reload) { nav(u); }
             });
-            box.addView(w, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+            // поверх страницы — курсор, которым управляют стрелки пульта
+            android.widget.FrameLayout frame = new android.widget.FrameLayout(getActivity());
+            frame.addView(w, new android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            LoginCursor cursor = new LoginCursor(getActivity(), w);
+            frame.addView(cursor, new android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            box.addView(frame, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
             d.setContentView(box);
             d.setOnKeyListener((di, code, ev) -> {
@@ -107,7 +112,8 @@ public class SplavNativePlugin extends Plugin {
                     if (w.canGoBack()) w.goBack(); else closeDialog(true);
                     return true;
                 }
-                return code == KeyEvent.KEYCODE_BACK;
+                if (code == KeyEvent.KEYCODE_BACK) return true;
+                return cursor.onKey(code, ev);
             });
             d.setOnDismissListener(di -> finish());
             Window win = d.getWindow();
@@ -220,6 +226,58 @@ public class SplavNativePlugin extends Plugin {
             getActivity().startActivity(i);
             call.resolve();
         } catch (Exception e) { call.reject("На телевизоре нет приложения, чтобы открыть ссылку"); }
+    }
+
+    /**
+     * Обновление по одной кнопке: скачиваем APK новой версии и открываем установщик Android.
+     * В первый раз Android попросит разрешить Сплаву устанавливать приложения — открываем этот экран.
+     */
+    @PluginMethod
+    public void installUpdate(PluginCall call) {
+        String url = call.getString("url");
+        if (url == null) { call.reject("Нет адреса обновления"); return; }
+        if (android.os.Build.VERSION.SDK_INT >= 26 && !getContext().getPackageManager().canRequestPackageInstalls()) {
+            try {
+                Intent i = new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getContext().getPackageName()));
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getActivity().startActivity(i);
+            } catch (Exception ignored) {}
+            call.reject("Разрешите Сплаву устанавливать приложения и нажмите «Обновить» ещё раз", "PERMISSION");
+            return;
+        }
+        new Thread(() -> {
+            java.io.File dir = new java.io.File(getContext().getCacheDir(), "updates");
+            java.io.File apk = new java.io.File(dir, "Splav-TV.apk");
+            try {
+                dir.mkdirs();
+                java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+                c.setInstanceFollowRedirects(true);
+                c.setConnectTimeout(20000); c.setReadTimeout(30000);
+                int code = c.getResponseCode();
+                if (code >= 300 && code < 400) {   // GitHub отдаёт файл с другого адреса
+                    String loc = c.getHeaderField("Location"); c.disconnect();
+                    c = (java.net.HttpURLConnection) new java.net.URL(loc).openConnection();
+                    code = c.getResponseCode();
+                }
+                if (code != 200) throw new Exception("сервер ответил " + code);
+                long total = c.getContentLengthLong(), done = 0; int lastPct = -1;
+                try (java.io.InputStream in = c.getInputStream(); java.io.FileOutputStream out = new java.io.FileOutputStream(apk)) {
+                    byte[] buf = new byte[65536]; int n;
+                    while ((n = in.read(buf)) > 0) {
+                        out.write(buf, 0, n); done += n;
+                        int pct = total > 0 ? (int) (done * 100 / total) : -1;
+                        if (pct != lastPct && pct % 5 == 0) { lastPct = pct; JSObject p = new JSObject(); p.put("percent", pct); notifyListeners("updateProgress", p); }
+                    }
+                }
+                Uri uri = androidx.core.content.FileProvider.getUriForFile(getContext(), getContext().getPackageName() + ".fileprovider", apk);
+                Intent i = new Intent(Intent.ACTION_VIEW);
+                i.setDataAndType(uri, "application/vnd.android.package-archive");
+                i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                getActivity().runOnUiThread(() -> { getActivity().startActivity(i); call.resolve(); });
+            } catch (Exception e) {
+                call.reject("Обновление не скачалось: " + e.getMessage());
+            }
+        }).start();
     }
 
     /** На iPhone настраивает экран блокировки; на телевизоре медиакнопки ловит MainActivity */
