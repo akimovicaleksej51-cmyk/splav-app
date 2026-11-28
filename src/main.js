@@ -365,7 +365,11 @@ handle('state', async () => {
   if (config.scToken) {
     // вход забываем, только если SoundCloud прямо отказал; при сбое сети вход остаётся
     try { const me = await sc('/me'); scUserId = me.id; st.sc = { name: me.username }; if (config.scName !== me.username) { config.scName = me.username; saveConfig(); } }
-    catch (e) { st.sc = /SoundCloud: (401|403)/.test(e.message) ? null : { name: config.scName || 'SoundCloud', offline: true }; }
+    catch (e) {
+      // SoundCloud прямо отказал — вход устарел: забываем его, чтобы не ошибаться при каждом запуске
+      if (/SoundCloud: (401|403)/.test(e.message)) { st.sc = null; config.scToken = null; scUserId = null; saveConfig(); st.scExpired = true; }
+      else st.sc = { name: config.scName || 'SoundCloud', offline: true };
+    }
   }
   if (config.zvToken) {
     try { const pr = await zvProfile(config.zvToken); st.zv = pr && !pr.anon ? { name: pr.name || 'Звук', sub: pr.sub } : null; if (!st.zv) { config.zvToken = null; saveConfig(); } }
@@ -422,7 +426,7 @@ handle('likes', async () => {
       next = r.next_href; q = {}; pages++;
     }
     remember(out.sc);
-  })().catch(e => { out.scError = e.message; }));
+  })().catch(e => { out.scError = /SoundCloud: (401|403)/.test(e.message) ? 'вход устарел, войдите заново в профиле' : e.message.replace(/^SoundCloud: /, ''); }));
   if (config.zvToken) jobs.push(zvLikes().then(l => { out.zv = l; }).catch(e => { out.zvError = e.message; }));
   if (process.platform === 'darwin' && config.prefs.appleMusic) jobs.push(amLibrary().then(l => { out.am = l; }).catch(e => { out.amError = e.message; }));
   jobs.push(localTracks().then(l => { out.local = l; }).catch(() => {}));

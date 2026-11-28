@@ -512,6 +512,7 @@ export async function refreshState() {
   state.accounts = { ya: s.ya, sc: s.sc, zv: s.zv };
   state.guest = !!s.guest; state.prefs = s.prefs || {}; state.keys = s.keys || {}; state.keyValues = s.keyValues || {};
   if (s.waveSettings) state.wave = { ...state.wave, ...s.waveSettings };
+  if (s.scExpired) toast('Вход в SoundCloud устарел. Войдите заново в профиле');
   return s;
 }
 export function askLogin(service) {
