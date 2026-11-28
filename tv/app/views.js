@@ -2,7 +2,8 @@
 import { API } from '../../mobile/app/api.js';
 import { $, $$, esc, cssUrl, bigCover, key, ico, toast, state, plural, SOURCE, focus, focusFirst, remember, menu } from './lib.js';
 import { updateBanner, checkUpdates, VERSION } from './update.js';
-import { playQueue, startWave, togglePlay, next, toggleLike, dislike, openPlayer, isPlaying, effectiveWave } from './player.js';
+import { openPhoneLogin } from './phonelogin.js';
+import { playQueue, startWave, togglePlay, next, prev, toggleLike, dislike, openPlayer, isPlaying, effectiveWave } from './player.js';
 
 /* ---------- боковое меню ---------- */
 const TABS = [['wave', 'wave', 'Главная'], ['chart', 'chart', 'Чарт'], ['library', 'heart', 'Моя музыка'], ['search', 'search', 'Поиск'], ['accounts', 'user', 'Аккаунты']];
@@ -105,10 +106,10 @@ renderers.wave = () => {
         <div class="h-title" id="hTitle"></div>
         <div class="h-sub" id="hSub"></div>
         <div class="h-ctrl">
+          <button class="f btn round" id="hPrev" aria-label="Предыдущий">${ico('prev')}</button>
           <button class="f btn primary big" id="hPlay" data-autofocus></button>
           <button class="f btn round" id="hNext" aria-label="Следующий">${ico('next')}</button>
           <button class="f btn round" id="hLike" data-like-now aria-label="Нравится">${ico('heart')}</button>
-          <button class="f btn round" id="hBan" aria-label="Не нравится">${ico('ban')}</button>
           <button class="f btn round" id="hOpen" aria-label="Плеер и текст песни">${ico('lyrics')}</button>
         </div>
       </div>
@@ -122,8 +123,8 @@ renderers.wave = () => {
     ${state.guest ? '<div class="note">Без входа волна собирается из SoundCloud, Audius и Jamendo. Войдите в Яндекс или Звук на вкладке «Аккаунты», чтобы слушать свою «Мою волну».</div>' : ''}`;
   $('#hPlay').onclick = () => { if (state.mode === 'wave' && state.current) togglePlay(); else startWave(state.station); };
   $('#hNext').onclick = () => (state.current ? next(true) : startWave(state.station));
+  $('#hPrev').onclick = () => { if (state.current) prev(); };
   $('#hLike').onclick = () => state.current && toggleLike(state.current);
-  $('#hBan').onclick = () => state.current && dislike(state.current);
   $('#hOpen').onclick = () => (state.current ? openPlayer() : startWave(state.station));
   const pickChip = (box, field) => $$('.chip', box).forEach(b => b.onclick = async () => {
     state.wave[field] = b.dataset.v;
@@ -308,13 +309,18 @@ renderers.accounts = () => {
   const el = $('#main'), A = state.accounts;
   el.innerHTML = `<div class="page-head"><h1>Аккаунты</h1></div>
     <div data-upd-box>${updateBanner()}</div>
+    <div class="acc phone" data-zone="phone"><div class="acc-logo ph">${ico('user')}</div>
+      <div class="acc-t"><b>Войти с телефона</b><span>Самый простой способ: наведите камеру iPhone на QR-код, и телевизор войдёт в те же Яндекс, SoundCloud и Звук, что и Сплав на телефоне</span></div>
+      <button class="f btn primary" id="aPhone" data-autofocus>Показать QR-код</button></div>
+    <div class="sec-title">Или войти прямо на телевизоре</div>
     <div class="accs" data-zone="accs">${SERVICES.map(([k, name, logo, bg, fg, hint]) => `<div class="acc">
       <div class="acc-logo" style="background:${bg};color:${fg}">${logo}</div>
       <div class="acc-t"><b>${name}</b>${A[k] ? `<span class="ok">Подключено${A[k].name ? ': ' + esc(A[k].name) : ''}${A[k].offline ? ' (нет связи)' : ''}</span>` : `<span>${hint}</span>`}</div>
       ${A[k] ? `<button class="f btn" data-out="${k}">${ico('logout')}<span>Выйти</span></button>` : `<button class="f btn primary" data-in="${k}">Войти</button>`}</div>`).join('')}</div>
-    <div class="note">Вход открывается в окне браузера. Буквы набираются экранной клавиатурой пульта, кнопка «Назад» закрывает окно.</div>
+    <div class="note">Вход на телевизоре открывается в окне браузера: стрелки двигают курсор, «ОК» нажимает, «Назад» закрывает окно. Вход через Google там не работает — Google запрещает его во встроенных окнах, поэтому для SoundCloud удобнее вход с телефона.</div>
     <div class="about" data-zone="about"><button class="f btn" id="aRefresh">${ico('refresh')}<span>Обновить музыку и чарт</span></button><button class="f btn" id="aUpd">Проверить новую версию</button><span>Сплав для ТВ ${VERSION}</span></div>`;
   $$('[data-in]', el).forEach(b => b.onclick = () => login(b.dataset.in));
+  $('#aPhone').onclick = () => openPhoneLogin(afterAccountChange);
   $$('[data-out]', el).forEach(b => b.onclick = async () => {
     const k = b.dataset.out;
     try { await API.logout(k); toast('Вы вышли'); await afterAccountChange(); } catch (e) { toast(e.message); }

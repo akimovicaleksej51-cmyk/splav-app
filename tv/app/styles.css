@@ -284,3 +284,17 @@ body.has-now #nowbar { display: flex; }
 .upd-t { flex: 1; min-width: 0; }
 .upd-t b { display: block; font-family: var(--display); font-weight: 700; font-size: 1.9rem; }
 .upd-t span { display: block; margin-top: .3rem; color: rgba(236,235,238,.7); font-size: 1.45rem; }
+
+/* ---------- вход с телефона ---------- */
+.acc.phone { max-width: 92rem; margin-bottom: .6rem; background: linear-gradient(100deg, rgba(181,29,48,.28), rgba(14,14,18,.8)); box-shadow: inset 0 0 0 1px rgba(209,42,63,.4); }
+.acc-logo.ph { background: var(--blood); color: #fff; }
+.acc-logo.ph svg { width: 3rem; height: 3rem; }
+.m-box.pl-login { width: 84rem; max-width: 88vw; display: flex; align-items: center; gap: 4rem; padding: 3.6rem; }
+.ql-qr { width: 30rem; height: 30rem; flex-shrink: 0; border-radius: 2rem; background: #fff; padding: 1.4rem; display: grid; place-items: center; }
+.ql-qr svg { width: 100%; height: 100%; }
+.ql-wait { color: #333; font-weight: 700; font-size: 1.6rem; }
+.ql-t { min-width: 0; }
+.ql-t .m-title { margin: 0 0 1.6rem; font-size: 2.6rem; white-space: normal; }
+.ql-t ol { padding-left: 2.4rem; color: rgba(236,235,238,.8); font-size: 1.7rem; line-height: 1.5; }
+.ql-t li { margin-bottom: .8rem; }
+.ql-status { margin: 2rem 0 2.4rem; color: var(--blood-hi); font-weight: 700; font-size: 1.7rem; }

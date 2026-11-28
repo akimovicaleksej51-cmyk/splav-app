@@ -280,6 +280,23 @@ public class SplavNativePlugin extends Plugin {
         }).start();
     }
 
+    @Override
+    public void load() { PlaybackService.web = new java.lang.ref.WeakReference<>(getBridge().getWebView()); }
+
+    /** Музыка играет в фоне: держим службу «Сейчас играет» и обновляем её карточку */
+    @PluginMethod
+    public void nowPlaying(PluginCall call) {
+        try {
+            PlaybackService.update(getContext(), call.getString("title"), call.getString("artist"), call.getString("cover"),
+                Boolean.TRUE.equals(call.getBoolean("playing", false)),
+                (long) (call.getDouble("position", 0.0) * 1000), (long) (call.getDouble("duration", 0.0) * 1000));
+            call.resolve();
+        } catch (Exception e) { call.reject("Служба воспроизведения не запустилась: " + e.getMessage()); }
+    }
+
+    @PluginMethod
+    public void stopPlayback(PluginCall call) { PlaybackService.stop(getContext()); call.resolve(); }
+
     /** На iPhone настраивает экран блокировки; на телевизоре медиакнопки ловит MainActivity */
     @PluginMethod
     public void remoteCommands(PluginCall call) { call.resolve(); }
