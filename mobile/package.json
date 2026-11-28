@@ -1,6 +1,6 @@
 {
   "name": "splav-mobile",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "private": true,
   "scripts": {
     "build": "node build.mjs",
@@ -24,7 +24,7 @@
     "js-sha256": "^0.11.0",
     "path-browserify": "^1.0.1"
   },
-  "releaseNotes": "Вход на телевизоре с телефона работает с любыми входами; понятное сообщение, когда вход в SoundCloud устарел",
+  "releaseNotes": "Пульт для телевизора больше не перелистывает треки",
   "nativeVersion": "1.3.0",
   "minNative": "1.2.0"
 }

@@ -7,12 +7,61 @@ import { Native, isNative } from '../core/native.js';
 
 // два проигрывателя: следующий трек грузится заранее на запасной, переключение мгновенное и без сети
 const mkDeck = () => { const a = new Audio(); a.preload = 'auto'; a.setAttribute('playsinline', ''); document.body.appendChild(a); return a; };
-const decks = [mkDeck(), mkDeck()];
+
+// Режим пульта: звук играет на телевизоре, а телефон только ведёт время трека.
+// «Немой» проигрыватель ведёт себя как настоящий (те же события и свойства), но ничего не грузит
+// и не играет: iPhone обрывал настоящие треки без звука, и Сплав перелистывал их один за другим.
+class SilentDeck extends EventTarget {
+  constructor() { super(); this._t = 0; this._at = 0; this._on = false; this._src = ''; this._timer = null; this.duration = NaN; this.readyState = 0; this.playbackRate = 1; this.volume = 1; this.muted = true; this.preload = 'auto'; }
+  get currentTime() { const t = this._on ? this._t + (performance.now() - this._at) / 1000 * this.playbackRate : this._t; return isFinite(this.duration) ? Math.min(t, this.duration) : t; }
+  set currentTime(v) { this._t = Math.max(0, +v || 0); this._at = performance.now(); this._emit('seeked'); this._emit('timeupdate'); }
+  get paused() { return !this._on; }
+  get ended() { return isFinite(this.duration) && this._t >= this.duration && !this._on; }
+  get src() { return this._src; }
+  set src(v) { this._src = v; this.readyState = 0; }
+  setAttribute() {}
+  removeAttribute() { this._src = ''; this._halt(); this._t = 0; this.duration = NaN; this.readyState = 0; }
+  load() { this._t = 0; this._halt(); if (this._src) { this.duration = (state.current && state.current.duration) || NaN; this.readyState = 4; this._emit('loadedmetadata'); } }
+  play() {
+    if (!this._src) return Promise.reject(new Error('Нет трека'));
+    if (this._on) return Promise.resolve();
+    // длительность — у текущего трека (заранее загруженный проигрыватель мог взять её у прошлого)
+    this.duration = (state.current && state.current.duration) || 240;
+    this._at = performance.now(); this._on = true; this.readyState = 4;
+    this._timer = setInterval(() => {
+      if (isFinite(this.duration) && this.currentTime >= this.duration) { this._t = this.duration; this._halt(); this._emit('pause'); this._emit('ended'); return; }
+      this._emit('timeupdate');
+    }, 250);
+    this._emit('play'); this._emit('playing');
+    return Promise.resolve();
+  }
+  pause() { if (!this._on) return; this._t = this.currentTime; this._halt(); this._emit('pause'); }
+  _halt() { if (this._timer) clearInterval(this._timer); this._timer = null; if (this._on) { this._t = this.currentTime; this._on = false; } }
+  _emit(n) { this.dispatchEvent(new Event(n)); }
+}
+const realDecks = [mkDeck(), mkDeck()], silentDecks = [new SilentDeck(), new SilentDeck()];
+let decks = realDecks;
 export let audio = decks[0];
 const spareDeck = () => (decks[0] === audio ? decks[1] : decks[0]);
-// режим пульта: телефон ведёт комнату, а звук играет на телевизоре
-export function setMuted(on) { decks.forEach(d => { d.muted = on; }); }
-const onDeck = (ev, fn) => decks.forEach(d => d.addEventListener(ev, e => { if (d === audio) fn(e); }));
+const onDeck = (ev, fn) => [...realDecks, ...silentDecks].forEach(d => d.addEventListener(ev, e => { if (d === audio) fn(e); }));
+// включить или выключить режим пульта, не теряя места в треке
+export async function setMuted(on) {
+  if ((decks === silentDecks) === on) return;
+  const t = state.current, at = curTime(), wasPlaying = isPlaying();
+  const old = audio;
+  decks = on ? silentDecks : realDecks;
+  audio = decks[0];
+  old.pause(); old.removeAttribute('src'); old.load();
+  pre.key = null; pre.el = null;
+  if (!t) return;
+  try {
+    const { url } = await API.stream(t);
+    audio.src = url; audio.load();
+    audio.currentTime = at;
+    if (wasPlaying) await audio.play();
+    syncPlaying(); updateTime();
+  } catch {}
+}
 // пауза, которую поставил человек (или комната), — её не надо «чинить» после звонка
 let userPaused = false, sysPausedAt = 0;
 export function userPause() { userPaused = true; audio.pause(); }
