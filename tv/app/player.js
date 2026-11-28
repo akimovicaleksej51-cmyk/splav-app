@@ -51,7 +51,7 @@ export function seekTo(sec) { try { audio.currentTime = Math.max(0, Math.min(sec
 const pre = { key: null, deck: null, at: 0, busy: false };
 function dropPrefetch() { if (pre.deck && pre.deck !== audio) unload(pre.deck); pre.key = null; pre.deck = null; }
 async function prefetchNext() {
-  if (pre.busy) return;
+  if (pre.busy || state.roomRole === 'guest') return;
   const t = state.queue[state.qi + 1]; if (!t || t.locked || t.available === false) return;
   const k = key(t); if (pre.key === k && Date.now() - pre.at < 8 * 60e3) return;
   pre.busy = true;
@@ -111,6 +111,7 @@ export async function playTrack(t) {
   }
 }
 export function playQueue(list, index, mode = 'list', from = '') {
+  if (state.roomRole === 'guest') { toast('Музыкой управляет хозяин комнаты. Выйти можно на вкладке «Вместе»'); return; }
   state.queue = list.filter(t => t.available !== false);
   state.qi = Math.max(0, state.queue.indexOf(list[index]));
   state.mode = mode; state.from = from;
@@ -118,6 +119,7 @@ export function playQueue(list, index, mode = 'list', from = '') {
   playTrack(state.queue[state.qi]);
 }
 export async function next(userSkip = true) {
+  if (state.roomRole === 'guest') { if (userSkip) toast('Треки переключает хозяин комнаты'); return; }
   const cur = state.current;
   if (state.mode === 'wave' && cur && userSkip) API.waveFeedback({ type: 'skip', track: cur, played: curTime() }).catch(() => {});
   if (state.qi + 1 >= state.queue.length) {
@@ -129,10 +131,12 @@ export async function next(userSkip = true) {
 }
 // «Назад» сразу включает предыдущий трек; если его нет — текущий с начала
 export function prev() {
+  if (state.roomRole === 'guest') { toast('Треки переключает хозяин комнаты'); return; }
   if (state.qi <= 0) { seekTo(0); return; }
   state.qi--; playTrack(state.queue[state.qi]);
 }
 export function togglePlay() {
+  if (state.roomRole === 'guest') { toast('Паузу ставит хозяин комнаты'); return; }
   if (!state.current) { startWave(); return; }
   if (audio.paused) audio.play().catch(() => {}); else audio.pause();
 }
@@ -171,6 +175,7 @@ export function effectiveWave() {
   return w;
 }
 export async function startWave(station) {
+  if (state.roomRole === 'guest') { toast('Музыкой управляет хозяин комнаты. Выйти можно на вкладке «Вместе»'); return; }
   state.station = station || null;
   state.mode = 'wave'; state.queue = []; state.qi = -1; state.from = '';
   state.waveStatus = 'Подбираем музыку…'; document.dispatchEvent(new Event('now-changed'));

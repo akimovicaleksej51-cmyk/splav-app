@@ -7,6 +7,7 @@ import { $, state, toast, move, back, onBack, focus, focusFirst, topLayer, setFa
 import { renderNow, syncPlaying, mediaKey, openPlayer, playerOpen, wake } from './player.js';
 import { showTab, refreshState, loadLikes, rerender, closeSub } from './views.js';
 import './update.js';
+import { saverKey } from './saver.js';
 
 
 /* ---------- подмены обработчиков ядра ----------
@@ -43,6 +44,8 @@ const DIRS = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 
 document.addEventListener('keydown', e => {
   if (playerOpen()) wake();
   if (mediaKey(e)) { e.preventDefault(); return; }
+  // открыта заставка — первая кнопка только убирает её
+  if (saverKey()) { e.preventDefault(); return; }
   const dir = DIRS[e.key];
   if (dir) {
     const a = document.activeElement;
@@ -61,6 +64,7 @@ document.addEventListener('keydown', e => {
 });
 // Назад: закрыть плеер или окно → вернуться в меню → в волну → свернуть приложение (музыка продолжит играть)
 function handleBack() {
+  if (saverKey()) return;
   if (back()) return;
   if (closeSub()) return;
   const a = document.activeElement;

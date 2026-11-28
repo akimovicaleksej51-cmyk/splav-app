@@ -1,7 +1,7 @@
 // «Вместе»: комнаты по коду из 6 цифр, друзья и отправка треков
 import { API } from './api.js';
 import { $, $$, esc, cssUrl, ico, toast, haptic, state, sheet, actions, push, pop, plural, onTab, timeAgo, bindRows, SOURCE } from './lib.js';
-import { playTrack, playQueue, seekTo, curTime, isPlaying, audio, syncPlaying, userPause } from './player.js';
+import { playTrack, playQueue, seekTo, curTime, isPlaying, audio, syncPlaying, userPause, setMuted } from './player.js';
 
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { isNative } from '../core/native.js';
@@ -144,7 +144,20 @@ export async function resolveTrack(t) {
     return pool.find(x => n(x.title) === n(t.title)) || pool.find(x => n(x.title).includes(n(t.title))) || null;
   } catch { return null; }
 }
+// Пульт для телевизора: телефон ведёт комнату без звука, телевизор слушает её гостем
+export async function remoteConnect(link) {
+  if (room.role === 'guest') roomLeave(true);
+  if (room.role !== 'host') await roomCreate();
+  if (room.role !== 'host') return;
+  room.remote = true; setMuted(true);
+  try {
+    await API.room({ action: 'update', code: link.code, hostKey: link.hostKey, state: { track: { source: 'remote', rawId: room.code, title: 'Пульт' }, playing: false, position: 0 } });
+    haptic('medium'); toast('Телевизор подключается. Выбирайте музыку здесь — играть будет на телевизоре');
+  } catch (e) { toast(/хозяин|Комнаты/.test(e.message) ? 'Код на телевизоре устарел. Откройте его заново' : e.message); }
+  const { showTab } = await import('./lib.js'); showTab('together');
+}
 export function roomLeave(silent) {
+  if (room.remote !== undefined) { room.remote = undefined; setMuted(false); }
   if (room.role === 'guest' && room.code) API.room({ action: 'leave', code: room.code, name: myName() }).catch(() => {});
   if (room.role === 'host' && room.code && !silent) API.room({ action: 'close', code: room.code, hostKey: room.hostKey }).catch(() => {});
   clearInterval(room.poll); clearInterval(room.ping);
@@ -217,7 +230,9 @@ function renderRoomCard(box) {
   const warn = dbWarn ? `<div class="cb-warn">${esc(dbWarn)}</div>` : '';
   const members = room.members.length ? room.members.map(m => `<span class="member">${esc(m)}</span>`).join('') : '<span class="note" style="padding:0">Пока никого</span>';
   if (room.role === 'host') {
-    box.innerHTML = `<div class="cb-title">Ваша комната</div><div class="code-big">${room.code.split('').map(d => `<span>${d}</span>`).join('')}</div>
+    const remote = room.remote !== undefined && room.code ? `<div class="cb-warn" style="background:rgba(181,29,48,.14);color:inherit">${room.remote ? 'Пульт телевизора: звук играет на телевизоре' : 'Звук играет и на телефоне, и на телевизоре'}</div>
+      <button class="btn wide" id="rMute" style="margin-bottom:10px">${room.remote ? 'Включить звук и на телефоне' : 'Звук только на телевизоре'}</button>` : '';
+    box.innerHTML = `${remote}<div class="cb-title">Ваша комната</div><div class="code-big">${room.code.split('').map(d => `<span>${d}</span>`).join('')}</div>
       <div class="cb-text">Продиктуйте код другу: он введёт его у себя в Сплаве, на вкладке «Комната».</div>
       <button class="btn primary wide" id="rInvite">${ico('send')}Пригласить ссылкой</button>
       <div class="btn-row" style="padding:0;margin-top:10px"><button class="btn" id="rCopy">${ico('copy')}Код</button><button class="btn" id="rEnd">Завершить</button></div>
@@ -230,6 +245,7 @@ function renderRoomCard(box) {
       catch (e) { if (e && e.name === 'AbortError') return; navigator.clipboard.writeText(url).then(() => toast('Ссылка скопирована: отправьте её другу')); }
     };
     $('#rEnd', box).onclick = () => { roomLeave(false); toast('Комната завершена'); };
+    const mu = $('#rMute', box); if (mu) mu.onclick = () => { room.remote = !room.remote; setMuted(room.remote); haptic(); renderTogether(); };
     return;
   }
   if (room.role === 'guest') {

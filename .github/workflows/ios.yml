@@ -36,6 +36,8 @@ jobs:
           WEB=$(node -p "require('./package.json').version")
           NATIVE=$(node -p "require('./package.json').nativeVersion || require('./package.json').version")
           echo "web=$WEB" >> "$GITHUB_OUTPUT"; echo "native=$NATIVE" >> "$GITHUB_OUTPUT"
+          # интерфейс может подходить и для более старой основы: тогда он приходит и тем, кто её ещё не обновил
+          echo "minNative=$(node -p "require('./package.json').minNative || require('./package.json').nativeVersion || require('./package.json').version")" >> "$GITHUB_OUTPUT"
           has() { git ls-remote --exit-code --tags origin "refs/tags/$1" >/dev/null 2>&1 && echo yes || echo no; }
           echo "webExists=$(has web-v$WEB)" >> "$GITHUB_OUTPUT"
           echo "nativeExists=$(has ios-v$NATIVE)" >> "$GITHUB_OUTPUT"
@@ -58,7 +60,7 @@ jobs:
         with:
           tag_name: web-v${{ steps.v.outputs.web }}
           name: Сплав для iPhone, обновление ${{ steps.v.outputs.web }}
-          body: ${{ format('Обновление приходит само. Нужна основа версии {0} или новее.', steps.v.outputs.native) }}
+          body: ${{ format('Обновление приходит само. Нужна основа версии {0} или новее.', steps.v.outputs.minNative) }}
           files: mobile/web.zip
           make_latest: false
 
@@ -69,7 +71,7 @@ jobs:
           git config user.email "splav-bot@users.noreply.github.com"
           git fetch origin main && git checkout -B main origin/main
           printf '{\n  "version": "%s",\n  "minNative": "%s",\n  "url": "https://github.com/%s/releases/download/web-v%s/web.zip",\n  "checksum": "%s"\n}\n' \
-            "${{ steps.v.outputs.web }}" "${{ steps.v.outputs.native }}" "${{ github.repository }}" "${{ steps.v.outputs.web }}" "$(cat /tmp/web.sha)" > web.json
+            "${{ steps.v.outputs.web }}" "${{ steps.v.outputs.minNative }}" "${{ github.repository }}" "${{ steps.v.outputs.web }}" "$(cat /tmp/web.sha)" > web.json
           git add web.json
           git commit -m "Обновление интерфейса ${{ steps.v.outputs.web }}" || exit 0
           for i in 1 2 3; do git push origin main && break; git pull --rebase origin main; done

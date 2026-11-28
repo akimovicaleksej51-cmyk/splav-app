@@ -46,6 +46,7 @@ public class SplavNativePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "clearLogin", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "openUrl", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "remoteCommands", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "signInfo", returnType: CAPPluginReturnPromise),
     ]
 
     private var remoteReady = false
@@ -144,6 +145,20 @@ public class SplavNativePlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func clearLogin(_ call: CAPPluginCall) {
         call.resolve()   // у окна входа своё временное хранилище: после закрытия оно и так пустое
+    }
+
+    /// Когда истекает подпись приложения: дата из встроенного профиля (его переписывает Sideloadly или SideStore)
+    @objc func signInfo(_ call: CAPPluginCall) {
+        guard let path = Bundle.main.path(forResource: "embedded", ofType: "mobileprovision"),
+              let data = FileManager.default.contents(atPath: path),
+              let text = String(data: data, encoding: .isoLatin1),
+              let start = text.range(of: "<?xml"),
+              let end = text.range(of: "</plist>"),
+              let xml = String(text[start.lowerBound..<end.upperBound]).data(using: .isoLatin1),
+              let plist = try? PropertyListSerialization.propertyList(from: xml, options: [], format: nil) as? [String: Any],
+              let expires = plist["ExpirationDate"] as? Date
+        else { call.resolve(["expires": NSNull()]); return }
+        call.resolve(["expires": expires.timeIntervalSince1970 * 1000])
     }
 
     @objc func openUrl(_ call: CAPPluginCall) {

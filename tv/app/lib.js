@@ -37,6 +37,10 @@ const P = {
   logout: '<path d="M14 5h4.5v14H14M10 8l-4 4 4 4M6 12h10"/>',
   refresh: '<path d="M19 12a7 7 0 1 1-2.1-5M19 4v4h-4"/>',
   chart: '<path d="M5 20v-7M12 20V5M19 20v-10"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  trash: '<path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/>',
+  people: '<circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19c.6-3 2.9-4.6 5.5-4.6s4.9 1.6 5.5 4.6"/><circle cx="16.5" cy="9.5" r="2.6"/><path d="M15.5 14.6c2.6-.2 4.4 1.3 5 4.4"/>',
+  list: '<path d="M4 6h11M4 10.5h11M4 15h7"/><path d="M17 13v7M13.5 16.5h7"/>',
   album: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.5"/>',
   up: '<path class="f" d="M12 6l6 8H6z"/>',
   down: '<path class="f" d="M12 18l6-8H6z"/>',
@@ -169,4 +173,21 @@ export function menu(title, items) {
   $$('.m-item', el).forEach(b => b.onclick = () => { close(); items[+b.dataset.i][2](); });
   focusFirst(el);
   return close;
+}
+
+/* ---------- окно ввода (название плейлиста и т.п.) ---------- */
+export function ask(title, { placeholder = '', ok = 'Готово' } = {}) {
+  return new Promise(resolve => {
+    const el = document.createElement('div'); el.className = 'modal';
+    el.innerHTML = `<div class="m-box"><div class="m-title">${esc(title)}</div><div class="s-field"><input class="f" id="askIn" placeholder="${esc(placeholder)}" autocomplete="off" spellcheck="false" data-autofocus></div><div class="m-row"><button class="f btn primary" id="askOk">${esc(ok)}</button><button class="f btn" id="askNo">Отмена</button></div></div>`;
+    document.body.appendChild(el);
+    let done = false;
+    const close = v => { if (done) return; done = true; popLayer(el); el.remove(); resolve(v); };
+    pushLayer(el, () => close(null));
+    const inp = $('#askIn', el);
+    $('#askOk', el).onclick = () => close(inp.value.trim() || null);
+    $('#askNo', el).onclick = () => close(null);
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); close(inp.value.trim() || null); } });
+    focus(inp);
+  });
 }

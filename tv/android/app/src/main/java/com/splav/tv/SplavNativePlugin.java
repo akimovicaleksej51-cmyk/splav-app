@@ -297,6 +297,17 @@ public class SplavNativePlugin extends Plugin {
     @PluginMethod
     public void stopPlayback(PluginCall call) { PlaybackService.stop(getContext()); call.resolve(); }
 
+    /** Пока играет музыка, экран телевизора не гаснет (заставку показывает сам Сплав) */
+    @PluginMethod
+    public void keepAwake(PluginCall call) {
+        boolean on = Boolean.TRUE.equals(call.getBoolean("on", false));
+        getActivity().runOnUiThread(() -> {
+            if (on) getActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            else getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            call.resolve();
+        });
+    }
+
     /** На iPhone настраивает экран блокировки; на телевизоре медиакнопки ловит MainActivity */
     @PluginMethod
     public void remoteCommands(PluginCall call) { call.resolve(); }
