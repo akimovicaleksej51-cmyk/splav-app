@@ -1,7 +1,7 @@
 # Сплав для телевизора (Android TV / Google TV): Splav-TV.apk в релиз tv-vВЕРСИЯ.
 # Новая версия выходит, когда в tv/package.json поднимают "version".
-# Подпись: секреты TV_KEYSTORE (файл ключа в base64) и TV_KEYSTORE_PASSWORD.
-# Без них APK всё равно соберётся, но только как файл сборки, без релиза:
+# Подпись: секрет TV_SIGNING — первая строка пароль, дальше файл ключа в base64.
+# Без него APK всё равно соберётся, но только как файл сборки, без релиза:
 # APK с другой подписью нельзя поставить поверх уже установленного.
 name: TV
 
@@ -30,7 +30,7 @@ jobs:
       - name: Версия
         id: v
         env:
-          HAS_KEY: ${{ secrets.TV_KEYSTORE != '' }}
+          HAS_KEY: ${{ secrets.TV_SIGNING != '' }}
         run: |
           V=$(node -p "require('./package.json').version")
           echo "version=$V" >> "$GITHUB_OUTPUT"
@@ -55,21 +55,22 @@ jobs:
       - name: Ключ подписи
         if: steps.v.outputs.exists == 'no' && steps.v.outputs.signed == 'true'
         env:
-          KEY: ${{ secrets.TV_KEYSTORE }}
+          SIGNING: ${{ secrets.TV_SIGNING }}
         run: |
-          echo "$KEY" | base64 -d > "$RUNNER_TEMP/splav-tv.keystore"
+          printf '%s\n' "$SIGNING" | head -n 1 | tr -d '\r\n ' > "$RUNNER_TEMP/pass"
+          printf '%s\n' "$SIGNING" | tail -n +2 | tr -d '\r\n ' | base64 -d > "$RUNNER_TEMP/splav-tv.keystore"
+          echo "::add-mask::$(cat "$RUNNER_TEMP/pass")"
           echo "SPLAV_KEYSTORE=$RUNNER_TEMP/splav-tv.keystore" >> "$GITHUB_ENV"
+          echo "SPLAV_KEYSTORE_PASSWORD=$(cat "$RUNNER_TEMP/pass")" >> "$GITHUB_ENV"
 
       - name: Сборка APK
         if: steps.v.outputs.exists == 'no'
         working-directory: tv/android
-        env:
-          SPLAV_KEYSTORE_PASSWORD: ${{ secrets.TV_KEYSTORE_PASSWORD }}
         run: |
           chmod +x gradlew
           if [ -n "$SPLAV_KEYSTORE" ]; then ./gradlew assembleRelease --no-daemon; cp app/build/outputs/apk/release/app-release.apk ../Splav-TV.apk
           else ./gradlew assembleDebug --no-daemon; cp app/build/outputs/apk/debug/app-debug.apk ../Splav-TV.apk
-            echo "::warning::Нет секретов TV_KEYSTORE и TV_KEYSTORE_PASSWORD: APK собран с временной подписью и выложен только как файл сборки"; fi
+            echo "::warning::Нет секрета TV_SIGNING: APK собран с временной подписью и выложен только как файл сборки"; fi
           ls -la ../Splav-TV.apk
 
       - name: Файл сборки
